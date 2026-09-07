@@ -1,0 +1,71 @@
+// @vitest-environment jsdom
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { MemoryRouter, Route, Routes } from "react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { LectureResultResponse } from "@meeting-notes/shared";
+
+const api = vi.hoisted(() => ({ lectureResult: vi.fn(), retryLecture: vi.fn(), startLecture: vi.fn(), deleteLecture: vi.fn() }));
+vi.mock("../api", () => ({ useApi: () => api }));
+import { LecturePage } from "../../pages/LecturePage";
+
+let root: Root; let element: HTMLDivElement; let client: QueryClient;
+const fixture = (): LectureResultResponse => ({
+  lecture: { lectureId: "test", owner: "alice", title: "최적화 수업", course: "머신러닝", status: "COMPLETED", outputLanguage: "ko", languageHint: "ko", stages: {}, createdAt: "2026-09-06", updatedAt: "2026-09-06", audioName: "a.mp3", slidesName: "a.pdf", uploadsComplete: true, pageCount: 1, researchFailures: 1 },
+  document: { version: 1, lectureId: "test", title: "최적화 수업", course: "머신러닝", outputLanguage: "ko", generatedAt: "2026-09-06", overview: "경사 하강법의 원리와 학습률을 공부합니다.", audience: { level: "학부 1학년, 첫 최적화 수업", priorKnowledge: ["미분"], lectureGoal: "경사 하강 한 단계를 계산하기" }, learningObjectives: ["업데이트 식을 이해하기"], reviewPlan: ["미분을 복습하기"], durationSec: 100, warnings: [], pages: [{
+    page: 1, title: "경사 하강법", slideText: "Gradient descent", imageKey: "one.png", slideSummary: "장표는 가중치 갱신을 설명합니다.", spokenSummary: "", explanation: "학습률 $\\eta$ 가 이동 크기를 정합니다.", alignment: { status: "unmatched", confidence: 0, reason: "" }, evidence: [],
+    concepts: [{ term: "학습률", explanation: "갱신의 크기" }], reviewQuestions: [{ question: "학습률이 크면?", answer: "최적점을 지나칠 수 있습니다.", difficulty: "basic" }], mathNotes: [{ kind: "formula", name: "갱신 식", statement: "$$x_{t+1} = x_t - \\eta \\nabla f(x_t)$$", steps: ["현재 위치 $x_t$에서 시작한다", "기울기 반대 방향으로 이동한다"], intuition: "내리막으로 걷기", supplementary: true }], flashcards: [{ front: "학습률이란?", back: "갱신의 크기" }], research: { status: "failed", queries: ["gradient descent"], papers: [] },
+  }] }, audioUrl: null, slidesUrl: "https://example.org/slides.pdf", markdownUrl: "https://example.org/study.md", flashcardsUrl: "https://example.org/cards.csv", pageImages: [],
+});
+beforeEach(async () => {
+  (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  vi.resetAllMocks(); api.lectureResult.mockResolvedValue(fixture()); api.retryLecture.mockResolvedValue(undefined);
+  element = document.createElement("div"); document.body.appendChild(element); root = createRoot(element);
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(["lecture", "test"], fixture());
+  await act(async () => root.render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/lectures/test"]}><Routes><Route path="/lectures/:id" element={<LecturePage />} /></Routes></MemoryRouter></QueryClientProvider>));
+});
+afterEach(async () => { await act(async () => root.unmount()); element.remove(); client.clear(); });
+function button(text: string) { return [...element.querySelectorAll("button")].find((b) => b.textContent?.includes(text))!; }
+
+it("shows study exports, unmatched speech and search failures without fabricated content", async () => {
+  expect(element.textContent).toContain("경사 하강법의 원리");
+  expect(element.querySelector('a[href="https://example.org/cards.csv"]')).not.toBeNull();
+  await act(async () => button("장표별 학습").click());
+  expect(element.textContent).toContain("대응하는 발언을 녹음에서 찾지 못했습니다");
+  expect(element.textContent).toContain("논문 검색을 완료하지 못했습니다");
+  expect(element.textContent).not.toContain("참고 논문이 없습니다");
+  const question = [...element.querySelectorAll("details")].find((d) => d.textContent?.includes("학습률이 크면"))!;
+  expect(question.open).toBe(false);
+  expect(question.textContent).toContain("최적점을 지나칠 수 있습니다");
+});
+
+it("opens flashcards and offers to retry only the failed paper search", async () => {
+  await act(async () => button("복습 카드").click());
+  expect(element.querySelector("details summary")?.textContent).toContain("학습률이란");
+  await act(async () => button("논문 검색 다시 시도").click());
+  expect(api.retryLecture).toHaveBeenCalledWith("test");
+});
+
+it("shows the inferred audience, question difficulty and KaTeX-rendered math notes", async () => {
+  expect(element.textContent).toContain("이 강의의 대상");
+  expect(element.textContent).toContain("학부 1학년, 첫 최적화 수업");
+  await act(async () => button("장표별 학습").click());
+  expect(element.textContent).toContain("수식과 정리");
+  expect(element.textContent).toContain("갱신 식");
+  expect(element.textContent).toContain("기본");
+  expect(element.textContent).toContain("강의에서 생략된 증명을 보충했습니다");
+  expect(element.querySelectorAll(".katex").length).toBeGreaterThanOrEqual(3); // statement, a step and the explanation
+  expect(element.textContent).not.toContain("$$");
+  const steps = [...element.querySelectorAll("ol")].find((list) => list.textContent?.includes("기울기 반대 방향"))!;
+  expect(steps.querySelectorAll("li").length).toBe(2);
+});
+
+it("opens the section named in the page query parameter", async () => {
+  await act(async () => root.unmount()); element.remove();
+  element = document.createElement("div"); document.body.appendChild(element); root = createRoot(element);
+  await act(async () => root.render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/lectures/test?page=1"]}><Routes><Route path="/lectures/:id" element={<LecturePage />} /></Routes></MemoryRouter></QueryClientProvider>));
+  expect(element.textContent).toContain("수식과 정리");
+  expect(element.textContent).not.toContain("학습 목표");
+});

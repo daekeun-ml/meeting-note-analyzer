@@ -1,0 +1,27 @@
+# AgentCore Runtime image (linux/arm64). Runs as a non-root user: the bundled Claude Code binary refuses
+# --dangerously-skip-permissions (bypassPermissions) as root, and it needs a writable $HOME/.claude.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 UV_LINK_MODE=copy UV_PROJECT_ENVIRONMENT=/opt/venv \
+    PATH=/opt/venv/bin:/root/.local/bin:$PATH \
+    OTEL_PYTHON_DISTRO=aws_distro OTEL_PYTHON_CONFIGURATOR=aws_configurator \
+    OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf OTEL_TRACES_EXPORTER=otlp OTEL_LOGS_EXPORTER=otlp \
+    OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED=true AGENT_OBSERVABILITY_ENABLED=true
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -u 1000 agent
+
+RUN curl -LsSf https://astral.sh/uv/0.9.8/install.sh | sh
+COPY pyproject.toml uv.lock /app/
+COPY src /app/src
+COPY prompts /app/prompts
+RUN uv sync --project /app --frozen --no-dev --no-editable --python python3.12 \
+    && chown -R agent:agent /opt/venv /app
+
+USER agent
+ENV HOME=/home/agent CLAUDE_CONFIG_DIR=/home/agent/.claude WORK_ROOT=/home/agent/work PROMPTS_DIR=/app/prompts
+RUN mkdir -p /home/agent/.claude /home/agent/work
+WORKDIR /home/agent
+EXPOSE 8080
+CMD ["opentelemetry-instrument", "python", "-m", "meeting_agents.main"]

@@ -1,0 +1,15 @@
+version: 0.2
+# Runs in the x86_64 CodeBuild project created by SttStack. Env: DATA_BUCKET, MODEL_VARIANT, HF_TOKEN (Secrets Manager).
+phases:
+  install:
+    runtime-versions:
+      python: 3.12
+    commands:
+      - pip install --quiet --upgrade pip
+      - pip install --quiet "torch==2.8.0" --index-url https://download.pytorch.org/whl/cpu
+      - pip install --quiet "crisperwhisper[ct2,convert]==2.0.2" "huggingface_hub>=0.34" "transformers>=4.40" "accelerate>=0.26"
+  build:
+    commands:
+      - python publish_model.py "$MODEL_VARIANT" /tmp/models
+      - aws s3 sync /tmp/models/ "s3://$DATA_BUCKET/models/stt/$MODEL_VARIANT/" --delete --no-progress
+      - aws s3 ls "s3://$DATA_BUCKET/models/stt/$MODEL_VARIANT/" --recursive --summarize | tail -3

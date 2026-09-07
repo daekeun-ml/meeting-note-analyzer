@@ -1,0 +1,22 @@
+{
+  "name": "@meeting-notes/infra",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "synth": "cdk synth --quiet",
+    "cdk": "cdk"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.268.0",
+    "constructs": "^10.4.2",
+    "@meeting-notes/shared": "*"
+  },
+  "devDependencies": {
+    "aws-cdk": "^2.1140.0",
+    "esbuild": "^0.25.9",
+    "tsx": "^4.20.5"
+  }
+}

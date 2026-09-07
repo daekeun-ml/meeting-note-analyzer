@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0a0f1a;
+  --color-surface: #111a2b;
+  --color-surface-2: #172236;
+  --color-surface-3: #1e2b44;
+  --color-line: #223050;
+  --color-line-2: #2d3d5f;
+  --color-ink: #eef2f8;
+  --color-ink-2: #a5b1c6;
+  --color-ink-3: #6f7d97;
+  --color-accent: #5b8cff;
+  --color-accent-strong: #4477f0;
+  --color-accent-soft: #18294f;
+  --color-violet: #8b7cff;
+  --color-success: #3ccf91;
+  --color-success-soft: #113727;
+  --color-warning: #f4b74a;
+  --color-warning-soft: #3b2c0f;
+  --color-danger: #f47070;
+  --color-danger-soft: #3f1c1c;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Apple SD Gothic Neo", "Pretendard Variable", Pretendard, "Noto Sans KR", system-ui, sans-serif;
+  --shadow-card: inset 0 1px 0 0 rgb(255 255 255 / 0.03), 0 10px 30px -18px rgb(0 0 0 / 0.7);
+  --shadow-glow: 0 8px 28px -10px rgb(91 140 255 / 0.55);
+}
+
+:root { color-scheme: dark; }
+html, body { -webkit-text-size-adjust: 100%; }
+body {
+  @apply bg-bg text-ink antialiased;
+  font-family: var(--font-sans);
+  overscroll-behavior-y: none;
+  font-feature-settings: "tnum" 1, "cv11" 1;
+}
+.safe-top { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+.tap { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+
+/* Full-height shell for the authenticated app: main scrolls, the tab bar stays in flow at the bottom.
+   Height comes from the html/body/#root percentage chain, not from vh/dvh: on iOS home-screen apps the viewport
+   units are resolved from a stale viewport at first launch, which left the tab bar hovering above the bottom edge. */
+html, body, #root { height: 100%; }
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  height: var(--app-height, 100%); /* measured by syncAppHeight() in main.tsx; iOS standalone reports a stale viewport on first launch */
+  overflow: hidden;
+}
+.app-shell > main { -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; }
+/* While the iOS keyboard is up the shell is sized to the visual viewport (syncAppHeight); drop the tab bar so the
+   composer, sticky at the bottom of <main>, sits directly above the keys. */
+:root[data-keyboard] .app-shell > nav { display: none; }
+:root[data-keyboard] .safe-bottom { padding-bottom: 0; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+/* Ambient background glow used on the login screen */
+.glow-bg {
+  background:
+    radial-gradient(60% 40% at 20% 0%, rgb(91 140 255 / 0.22), transparent 70%),
+    radial-gradient(50% 35% at 90% 20%, rgb(139 124 255 / 0.16), transparent 70%),
+    var(--color-bg);
+}
+
+/* Range input for the audio player */
+input[type="range"].seek { -webkit-appearance: none; appearance: none; height: 28px; background: transparent; width: 100%; }
+input[type="range"].seek::-webkit-slider-runnable-track { height: 4px; border-radius: 999px; background: linear-gradient(to right, var(--color-accent) var(--p, 0%), var(--color-line-2) var(--p, 0%)); }
+input[type="range"].seek::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 999px; background: #fff; box-shadow: 0 1px 4px rgb(0 0 0 / 0.5); }
+input[type="range"].seek::-moz-range-track { height: 4px; border-radius: 999px; background: var(--color-line-2); }
+input[type="range"].seek::-moz-range-progress { height: 4px; border-radius: 999px; background: var(--color-accent); }
+input[type="range"].seek::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 999px; background: #fff; }
+
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.skeleton { background: linear-gradient(90deg, var(--color-surface-2) 25%, var(--color-surface-3) 50%, var(--color-surface-2) 75%); background-size: 200% 100%; animation: shimmer 1.6s linear infinite; }

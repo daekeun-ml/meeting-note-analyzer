@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "composite": true,
+    "types": ["vite/client", "vite-plugin-pwa/client"],
+    "tsBuildInfoFile": "node_modules/.tmp/app.tsbuildinfo"
+  },
+  "include": ["src", "vite.config.ts"],
+  "exclude": ["src/sw.ts"]
+}

@@ -1,0 +1,23 @@
+{
+  "projectName": "meeting-analyzer",
+  "stackPrefix": "MeetingAnalyzer",
+  "region": "us-east-1",
+  "siteUrl": "",
+  "cognitoDomainPrefix": "",
+  "operatorEmail": "",
+  "alarmEmail": "",
+  "enableSlackAlarms": false,
+  "sttModelVariant": "large",
+  "sttInstanceType": "ml.g5.xlarge",
+  "sttMinInstances": 0,
+  "sttMaxInstances": 2,
+  "sttAutoscaling": true,
+  "sttDeployEndpoint": false,
+  "sttModelRevision": "1",
+  "opusModel": "global.anthropic.claude-opus-5",
+  "sonnetModel": "global.anthropic.claude-sonnet-5",
+  "haikuModel": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+  "lectureMaxModelCalls": 800,
+  "lectureMaxSearchCalls": 240,
+  "stageBudgetUsd": 50
+}

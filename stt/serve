@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# SageMaker invokes `docker run <image> serve`; ignore args and start the API server.
+set -euo pipefail
+exec /opt/venv/bin/python -m stt

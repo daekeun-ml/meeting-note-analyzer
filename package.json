@@ -1,0 +1,45 @@
+{
+  "name": "meeting-note-analyzer",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Meeting recording (mp3) analyzer: CrisperWhisper STT on SageMaker + Claude Agent SDK multi-agent on AgentCore, orchestrated by Step Functions, deployed with CDK.",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/shared",
+    "packages/backend",
+    "services/api",
+    "services/pipeline",
+    "infra",
+    "web"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "synth": "python3 scripts/manage.py synth",
+    "configure": "python3 scripts/manage.py configure",
+    "doctor": "python3 scripts/manage.py doctor",
+    "secrets": "python3 scripts/manage.py secrets",
+    "bootstrap": "python3 scripts/manage.py bootstrap",
+    "deploy:foundation": "python3 scripts/manage.py foundation",
+    "models:publish": "python3 scripts/manage.py models",
+    "deploy": "python3 scripts/manage.py deploy",
+    "diff": "python3 scripts/manage.py diff",
+    "status": "python3 scripts/manage.py status",
+    "check:deployment": "python3 scripts/manage.py check",
+    "user:create": "python3 scripts/manage.py user-create",
+    "user:password": "python3 scripts/manage.py user-password",
+    "destroy": "python3 scripts/manage.py destroy",
+    "dev:config": "python3 scripts/manage.py dev-config",
+    "check:public": "python3 scripts/check-public.py",
+    "test:deploy": "python3 -m unittest discover -s tests -p \"test_*.py\""
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4",
+    "@types/node": "^22.18.0"
+  }
+}
