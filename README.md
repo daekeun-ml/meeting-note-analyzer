@@ -65,6 +65,8 @@ Start with `us-east-1`. Check regional availability for AgentCore Web Search, ma
 
 Deployment creates billable AWS resources, including GPU transcription capacity and model calls. Read the [deployment prerequisites](docs/deployment.md#before-you-start) before starting.
 
+Review the [open STT dependency advisory](SECURITY.md#known-dependency-advisory) before deployment. Passing tests and secret scans does not resolve that dependency issue.
+
 AWS CLI credentials are used for deployment and administration. They are separate from the Cognito accounts used to sign in to the app.
 
 Choose an existing AWS CLI profile with deployment permissions. If it uses IAM Identity Center, sign in with `aws sso login --profile your-profile` first. For a new SSO profile, use `aws configure sso --profile your-profile`. Other AWS credential methods do not require SSO.

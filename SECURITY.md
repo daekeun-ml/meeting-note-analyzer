@@ -4,6 +4,12 @@
 
 Use GitHub's private vulnerability reporting for this repository when available. Do not attach credentials, recordings, transcripts, signed download URLs, or deployment output files to a public issue.
 
+## Known dependency advisory
+
+As of 2026-09-08, Dependabot flags `lightning` 2.6.5 in `stt/uv.lock`, a transitive dependency of `pyannote.audio`, for [GHSA-qqmf-gpg7-g8gw / CVE-2026-58659](https://github.com/advisories/GHSA-qqmf-gpg7-g8gw). The advisory describes arbitrary code execution when loading a malicious model checkpoint.
+
+This alert remains open. Review the upstream fix and a compatible package release before deployment, and use only trusted model checkpoints. The advisory's patched-version metadata differs from its description, so an automated version substitution needs verification. Unit tests, image builds, and secret scans do not establish that the affected dependency is fixed.
+
 ## Authentication and access
 
 The web app uses Cognito managed login with an authorization code flow and PKCE. It is a public application client with no client secret. Accounts are created by an AWS administrator, and public self-sign-up is disabled.
