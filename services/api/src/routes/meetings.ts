@@ -16,7 +16,7 @@ import {
 } from "@meeting-notes/shared";
 import { claimRetry, countActiveMeetings, deleteMeeting, getMeeting, listMeetingsByOwner, markBriefRun, putMeeting, releaseRetry } from "@meeting-notes/backend";
 import { HttpError, type Caller } from "../lib/http.js";
-import { abortMultipartUpload, applySpeakerLabels, completeMultipartUpload, createMultipartUpload, deleteMeetingMemory, deletePrefix, presignDownload, presignUpload, putFinalDocument, readJson } from "@meeting-notes/backend";
+import { abortMultipartUpload, applySpeakerLabels, completeMultipartUpload, createMultipartUpload, deleteMeetingMemory, deletePrefix, headObject, presignDownload, presignUpload, putFinalDocument, readJson } from "@meeting-notes/backend";
 import { apiEnv } from "../lib/env.js";
 
 const sfn = new SFNClient({});
@@ -108,13 +108,19 @@ export async function requireOwnedMeeting(caller: Caller, meetingId: string): Pr
 export async function getMeetingResult(caller: Caller, meetingId: string): Promise<MeetingResultResponse> {
   const rec = await requireOwnedMeeting(caller, meetingId);
   const notes = rec.notesKey ? await readJson<NotesDocument>(rec.notesKey) : null;
-  const [transcriptUrl, audioUrl, notesMarkdownUrl] = await Promise.all([
-    rec.transcriptKey ? presignDownload(rec.transcriptKey) : Promise.resolve(null),
+  const attributedKey = s3Keys.attributedTranscript(meetingId);
+  const attributed = rec.transcriptKey && rec.stages?.speaker_attribution?.status === "COMPLETED"
+    ? await headObject(attributedKey) : null;
+  const transcriptKey = attributed ? attributedKey : rec.transcriptKey;
+  const [transcriptUrl, originalTranscriptUrl, audioUrl, notesMarkdownUrl] = await Promise.all([
+    transcriptKey ? presignDownload(transcriptKey) : Promise.resolve(null),
+    attributed && rec.transcriptKey ? presignDownload(rec.transcriptKey) : Promise.resolve(null),
     rec.status !== "UPLOAD_PENDING" ? presignDownload(rec.audioKey) : Promise.resolve(null),
     // Derive the markdown key from the stored document key so meetings finalized under the old key layout keep working.
     rec.notesKey ? presignDownload(rec.notesKey.replace(/\.json$/, ".md")) : Promise.resolve(null),
   ]);
-  return { meeting: toMeetingDto(rec), notes, transcriptUrl, audioUrl, notesMarkdownUrl };
+  return { meeting: toMeetingDto(rec), notes, transcriptUrl, originalTranscriptUrl,
+    transcriptRevision: attributed?.revision ?? rec.stages?.transcript_analysis?.startedAt ?? rec.createdAt, audioUrl, notesMarkdownUrl };
 }
 
 export async function removeMeeting(caller: Caller, meetingId: string): Promise<void> {

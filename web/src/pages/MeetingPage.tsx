@@ -75,7 +75,7 @@ export function MeetingPage() {
 
   if (q.isLoading) return <div className="px-4 pt-2">{back}<Skeleton className="h-8 w-3/4 mt-3" /><Skeleton className="h-4 w-1/2 mt-3" /><Skeleton className="h-40 mt-5" /></div>;
   if (q.error || !q.data) return <div className="px-4 pt-2">{back}<InlineError>{String((q.error as Error)?.message ?? "오류")}</InlineError></div>;
-  const { meeting, notes, transcriptUrl, audioUrl, notesMarkdownUrl } = q.data;
+  const { meeting, notes, transcriptUrl, originalTranscriptUrl, transcriptRevision, audioUrl, notesMarkdownUrl } = q.data;
   const doc = notes as NotesDocument | null;
   const speakerLabels = Object.fromEntries((doc?.speakers ?? []).map((s) => [s.id, s.label]));
   const processing = meeting.status !== "COMPLETED";
@@ -134,7 +134,7 @@ export function MeetingPage() {
         {tab === "followups" && doc && <FollowUpsTab doc={doc} />}
         {tab === "suggestions" && doc && <SuggestionsTab doc={doc} />}
         {tab === "mindmap" && doc?.mindmap && <MindMapView map={doc.mindmap} />}
-        {tab === "transcript" && transcriptUrl && <Transcript transcriptUrl={transcriptUrl} audioUrl={audioUrl} speakerLabels={speakerLabels} />}
+        {tab === "transcript" && transcriptUrl && <Transcript transcriptUrl={transcriptUrl} originalTranscriptUrl={originalTranscriptUrl} transcriptRevision={transcriptRevision} audioUrl={audioUrl} speakerLabels={speakerLabels} confirmedSpeakerNames={(doc?.speakers ?? []).filter((s) => s.nameConfirmedByUser).map((s) => s.id)} onRefreshUrls={async () => (await q.refetch({ throwOnError: true })).data} />}
         {tab !== "transcript" && !doc && transcriptUrl && <p className="text-sm text-ink-3">분석이 끝나면 여기에 결과가 표시됩니다. 전사 탭에서 전사 결과를 먼저 볼 수 있습니다.</p>}
       </section>
       {doc && (tab === "summary" || tab === "notes") && <MeetingBrief doc={doc}
@@ -175,6 +175,7 @@ function SummaryTab({ doc, onRename }: { doc: NotesDocument; onRename?: (id: str
               <div className="min-w-0 flex-1">
                 <SpeakerName label={s.label} colorClass={speakerColorClass(i) ?? ""} onSave={onRename ? (label) => onRename(s.id, label) : undefined} />
                 {s.role && <p className="text-[12px] text-ink-3">{s.role}</p>}
+                {s.reviewRequired && <p className="text-[12px] text-ink-3 mt-1">이름 검토 필요{s.proposedLabel ? `: ${s.proposedLabel}로 추정` : ""}. 전사 탭에서 근거를 확인할 수 있습니다.</p>}
               </div>
             </li>
           ))}

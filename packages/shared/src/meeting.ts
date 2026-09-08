@@ -130,6 +130,10 @@ export interface MeetingResultResponse {
   meeting: MeetingDto;
   notes: unknown | null;
   transcriptUrl: string | null;
+  /** Original acoustic labels, offered alongside a corrected transcript. */
+  originalTranscriptUrl?: string | null;
+  /** Object revision for cache invalidation when a transcript is regenerated at the same key. */
+  transcriptRevision?: string;
   audioUrl: string | null;
   notesMarkdownUrl: string | null;
 }

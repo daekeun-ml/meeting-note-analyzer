@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import boto3
+from botocore.exceptions import ClientError
 from claude_agent_sdk import AgentDefinition, ClaudeAgentOptions, ResultMessage, query
 
 from . import brief, keys, memory, mindmap, quality, sanitize, tracing
@@ -20,7 +21,8 @@ from .payload import StagePayload
 from .schemas import json_schema, validate
 from .stages import SPECS, StageSpec, SubagentSpec
 from .tools import TOOL_NAMES, build_server
-from .transcript import Transcript, apply_attribution
+from .transcript import Transcript
+from .attribution import reconcile_attribution
 
 log = logging.getLogger("agents.runner")
 
@@ -90,8 +92,10 @@ def prepare_workdir(s3, payload: StagePayload, spec: StageSpec) -> tuple[Path, T
         try:
             s3.head_object(Bucket=DATA_BUCKET, Key=keys.attributed_transcript(payload.meetingId))
             src_key = keys.attributed_transcript(payload.meetingId)
-        except Exception:  # noqa: BLE001
-            pass
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code")
+            if code not in ("404", "NoSuchKey", "NotFound"):
+                raise
     s3.download_file(DATA_BUCKET, src_key, str(tpath))
     transcript = Transcript.load(tpath)
     (workdir / "transcript.md").write_text(transcript.to_markdown(payload.title), encoding="utf-8")
@@ -243,16 +247,18 @@ def run_stage(payload: StagePayload) -> dict[str, Any]:
             log.warning("stage %s attempt %d rejected: %s", spec.name, attempt, note)
         if validated is None:
             raise StageError(f"stage output rejected after {MAX_ATTEMPTS} attempts: {note}")
-        if spec.name != "meeting_brief":  # The resolved recap includes verbatim transcript quotes.
+        if spec.name not in ("meeting_brief", "speaker_attribution"):  # These contain verbatim transcript evidence.
             validated = sanitize.clean_output(validated)
         if spec.name == "mindmap":
             validated = verify_mindmap(validated, workdir, lambda note: asyncio.run(run_query(build_task_prompt(payload, spec, workdir, transcript, note), options, spec.name)))
+        attributed = None
+        if spec.name == "speaker_attribution":
+            validated, attributed = reconcile_attribution(transcript.data, validated)
         if hb.dead.is_set():
             raise StageError("task token expired during processing", transient=False)
         out_key = keys.stage_result(payload.meetingId, spec.name)
         s3.put_object(Bucket=DATA_BUCKET, Key=out_key, Body=json.dumps(validated, ensure_ascii=False).encode("utf-8"), ContentType="application/json")
-        if spec.name == "speaker_attribution":
-            attributed = apply_attribution(transcript.data, validated)
+        if attributed is not None:
             s3.put_object(Bucket=DATA_BUCKET, Key=keys.attributed_transcript(payload.meetingId), Body=json.dumps(attributed, ensure_ascii=False).encode("utf-8"), ContentType="application/json")
         memory.record_stage_note(payload.ownerSub, payload.meetingId, spec.name, stage_note(spec.name, validated))
         usage = {"costUsd": getattr(result, "total_cost_usd", None), "turns": getattr(result, "num_turns", None), "durationSec": round(time.time() - t0, 1)}

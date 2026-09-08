@@ -69,7 +69,19 @@ class TopicSegmentation(Strict):
 
 
 # ---- speaker_attribution ----
-class SpeakerInfo(Strict):
+class SpeakerEvidence(Strict):
+    segmentId: str
+    quote: str = Field(min_length=1)
+
+
+class AttributionDecision(Strict):
+    # Older stage outputs are proposals until their evidence can be checked.
+    decision: Literal["confirmed", "review_required"] = "review_required"
+    basis: Literal["explicit_identity", "context"] = "context"
+    support: list[SpeakerEvidence] = Field(default_factory=list)
+
+
+class SpeakerInfo(AttributionDecision):
     id: str
     label: str
     name: str | None = None
@@ -78,17 +90,20 @@ class SpeakerInfo(Strict):
     evidence: list[str] = Field(default_factory=list)
 
 
-class Merge(Strict):
+class Merge(AttributionDecision):
     from_: list[str] = Field(alias="from")
     to: str
+    confidence: float = Field(default=0, ge=0, le=1)
+    reason: str = ""
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
-class Relabel(Strict):
+class Relabel(AttributionDecision):
     segmentId: str
     from_: str = Field(alias="from")
     to: str
     reason: str | None = None
+    confidence: float = Field(default=0, ge=0, le=1)
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 

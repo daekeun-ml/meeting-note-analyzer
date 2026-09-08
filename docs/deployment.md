@@ -129,6 +129,7 @@ Then test the application:
 
 1. Sign in and confirm the browser returns to the CloudFront site.
 2. Upload a short MP3. Check the transcript, detailed notes, and concise brief after processing finishes.
+   In the transcript tab, compare the original and corrected speakers and inspect any **검토 필요** markers. See [speaker review](speaker-review.md#updating-and-checking-an-installation) for the checks.
 3. Upload a short MP4 with visible slides and speech. Check the screen sections, evidence, study questions, and exports.
 4. Open a chat and follow a source reference back to its meeting or lecture.
 5. Enable completion notifications if your browser supports Web Push.

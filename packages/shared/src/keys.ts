@@ -5,6 +5,7 @@ export const s3Keys = {
   sttFailurePrefix: "stt/failure/",
   modelsPrefix: "models/",
   transcriptJson: (meetingId: string) => `transcripts/${meetingId}/transcript.json`,
+  attributedTranscript: (meetingId: string) => `results/${meetingId}/transcript_attributed.json`,
   transcriptMd: (meetingId: string) => `transcripts/${meetingId}/transcript.md`,
   stageResult: (meetingId: string, stage: string) => `results/${meetingId}/${stage}.json`,
   /** Final assembled document. Not `notes.json`: that key belongs to the `notes` stage result (stageResult). */

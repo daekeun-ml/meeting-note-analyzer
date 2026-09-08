@@ -51,10 +51,11 @@ export function applySpeakerLabels(doc: NotesDocument, labels: Record<string, st
   const renames: [string, string][] = [];
   const speakers = doc.speakers.map((s) => {
     const next = labels[s.id]?.trim();
-    if (!next || next === s.label) return s;
+    if (!next || (next === s.label && !s.reviewRequired)) return s;
     changed += 1;
     renames.push([s.label, next]);
-    return { ...s, label: next, name: next };
+    const { proposedLabel: _proposal, reviewReason: _reason, ...rest } = s;
+    return { ...rest, label: next, name: next, reviewRequired: false, nameConfirmedByUser: true };
   });
   if (!changed) return { doc, changed };
   const rename = (text: string | undefined) => {

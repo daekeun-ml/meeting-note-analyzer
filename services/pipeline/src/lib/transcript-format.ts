@@ -17,7 +17,9 @@ export function transcriptToMarkdown(t: Transcript, title: string): string {
     "",
   ];
   for (const seg of t.segments) {
-    lines.push(`[${hms(seg.start)}] ${seg.speaker} (${seg.id}): ${seg.text}`);
+    const label = seg.speakerLabel && seg.speakerLabel !== seg.speaker ? `${seg.speaker} (${seg.speakerLabel})` : seg.speaker;
+    const review = seg.speakerReviewRequired ? " [speaker review required]" : "";
+    lines.push(`[${hms(seg.start)}] ${label}${review} (${seg.id}): ${seg.text}`);
   }
   return lines.join("\n") + "\n";
 }

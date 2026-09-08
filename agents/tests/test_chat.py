@@ -55,13 +55,13 @@ def test_stream_delta_mapping_and_tool_titles():
     assert tool_title("mcp__meeting__search_meetings", {"query": "타임아웃"}) == "회의록 검색: 타임아웃"
 
 
-def test_speaker_namer_applies_labels_merges_and_relabels():
+def test_speaker_namer_uses_selected_ids_and_honors_manual_names():
     from meeting_agents.chat.tools import _speaker_namer
 
-    name = _speaker_namer({"speakers": [{"id": "S1", "label": "김민준"}, {"id": "S2", "label": "이서현"}]}, {"merges": [{"from": ["S3"], "to": "S1"}], "relabels": [{"segmentId": "seg-9", "from": "S1", "to": "S2"}]})
+    name = _speaker_namer({"speakers": [{"id": "S1", "label": "김민준"}, {"id": "S2", "label": "이서현"}]})
     assert name({"id": "seg-1", "speaker": "S1"}) == "김민준"
-    assert name({"id": "seg-2", "speaker": "S3"}) == "김민준"
-    assert name({"id": "seg-9", "speaker": "S1"}) == "이서현"
+    assert name({"id": "seg-2", "speaker": "S3", "speakerLabel": "직접 소개한 이름"}) == "직접 소개한 이름"
+    assert name({"id": "seg-9", "speaker": "S2", "speakerLabel": "이전 이름"}) == "이서현"
     assert name({"id": "seg-5", "speaker": "S7"}) == "S7"
 
 

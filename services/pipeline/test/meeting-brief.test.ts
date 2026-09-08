@@ -59,7 +59,7 @@ it("never replaces a published document when the new brief is missing", async ()
   expect(backend.putFinalDocument).not.toHaveBeenCalled();
 });
 it("does not fail a published brief or rerun analysis when notification delivery fails", async () => {
-  backend.readJson.mockImplementation(async (key) => key === record.notesKey ? { meetingId: "m1" } : { headline: "완성된 추가 요약" });
+  backend.readJson.mockImplementation(async (key) => key === record.notesKey ? { meetingId: "m1", speakers: [] } : { headline: "완성된 추가 요약" });
   backend.notifyUser.mockRejectedValueOnce(new Error("push unavailable"));
   const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
   try {

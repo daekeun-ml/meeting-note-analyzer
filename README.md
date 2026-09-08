@@ -7,6 +7,7 @@ The app uses the CloudFront URL created during deployment, with HTTPS provided b
 ## Features
 
 - **Meeting notes:** upload an MP3 to get a transcript, speaker labels, agenda, detailed notes, follow-up tasks, suggestions, and a mind map.
+- **Speaker review:** contextual corrections are checked against transcript evidence. Uncertain changes keep the original speaker and are marked for review. Compare the original and corrected transcripts or play the supporting speech. See [speaker review](docs/speaker-review.md).
 - **Short meeting brief:** a separate recap of the outcome, decisions and their reasoning, action items, and unresolved questions. Decision explanations include transcript evidence when available.
 - **Lecture study:** upload an MP4, optionally with a PPTX or PDF. The pipeline matches screen content with spoken explanations and generates notes, questions, flashcards, and reference links.
 - **Paper search:** lecture references are retrieved through the AgentCore Web Search MCP connector and Gateway.

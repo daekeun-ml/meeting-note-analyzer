@@ -33,8 +33,31 @@ export const sttOutputSchema = z.object({
 export type SttOutput = z.infer<typeof sttOutputSchema>;
 export type SttSegment = z.infer<typeof sttSegmentSchema>;
 
+export const speakerCorrectionSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["label", "merge", "relabel"]),
+  from: z.array(z.string()),
+  to: z.string(),
+  proposedLabel: z.string().optional(),
+  status: z.enum(["applied", "review_required"]),
+  reason: z.string(),
+  issues: z.array(z.string()),
+  evidence: z.array(z.object({ segmentId: z.string(), quote: z.string() })),
+  segmentIds: z.array(z.string()),
+});
+export type SpeakerCorrection = z.infer<typeof speakerCorrectionSchema>;
+
 /** Normalized transcript stored at transcripts/{id}/transcript.json (same shape, guaranteed sorted + ids). */
 export const transcriptSchema = sttOutputSchema.extend({
   normalizedAt: z.string(),
+  attributed: z.boolean().optional(),
+  speakerAttribution: z.object({ version: z.literal(2), corrections: z.array(speakerCorrectionSchema) }).optional(),
+  segments: z.array(sttSegmentSchema.extend({
+    originalSpeaker: z.string().optional(),
+    speakerLabel: z.string().optional(),
+    speakerCorrectionIds: z.array(z.string()).optional(),
+    speakerReviewRequired: z.boolean().optional(),
+  })),
+  speakers: z.array(sttSpeakerSchema.extend({ label: z.string().optional() })),
 });
 export type Transcript = z.infer<typeof transcriptSchema>;

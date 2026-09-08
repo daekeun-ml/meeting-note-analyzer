@@ -1,3 +1,5 @@
+import type { SpeakerCorrection } from "./stt.js";
+
 /**
  * Stage output contracts. The Python agent runtime enforces these with pydantic
  * (agents/src/schemas/*.py); keep both in sync. All text fields are written in the
@@ -20,10 +22,21 @@ export interface TopicSegmentation {
   topics: { id: string; title: string; startSec: number; endSec: number; segmentIds: string[]; summary: string; keywords: string[] }[];
 }
 
+export interface AttributionDecision {
+  decision?: "confirmed" | "review_required";
+  basis?: "explicit_identity" | "context";
+  support?: { segmentId: string; quote: string }[];
+}
+
 export interface SpeakerAttribution {
-  speakers: { id: string; label: string; name?: string; role?: string; confidence: number; evidence: string[] }[];
-  merges: { from: string[]; to: string }[];
-  relabels: { segmentId: string; from: string; to: string; reason?: string }[];
+  speakers: (AttributionDecision & {
+    id: string; label: string; name?: string; role?: string; confidence: number; evidence: string[];
+    reviewRequired?: boolean; proposedLabel?: string; reviewReason?: string; nameConfirmedByUser?: boolean;
+  })[];
+  merges: (AttributionDecision & { from: string[]; to: string; confidence?: number; reason?: string })[];
+  relabels: (AttributionDecision & { segmentId: string; from: string; to: string; reason?: string; confidence?: number })[];
+  /** Runtime output only. These proposals have NOT changed the transcript's speaker ids. */
+  reviewItems?: SpeakerCorrection[];
   notes: string;
 }
 

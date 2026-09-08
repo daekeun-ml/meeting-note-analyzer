@@ -4,6 +4,7 @@ import { env, getMeeting, notifyUser, readJson, s3, putFinalDocument } from "@me
 import { STAGES, s3Keys, type MeetingBrief, type NotesDocument, type StageOutputs, type Transcript } from "@meeting-notes/shared";
 import { pipelineEnv } from "../lib/env.js";
 import { updateMeeting } from "../lib/meeting-updates.js";
+import { transcriptToMarkdown } from "../lib/transcript-format.js";
 
 const agentcore = new BedrockAgentCoreClient({});
 
@@ -85,10 +86,18 @@ export const handler = async (input: FinalizeInput) => {
       (outputs as unknown as Record<string, unknown>)[stage] = data;
     }
     doc = assembleNotes(input, transcript, outputs);
+    const attributed = await readJson<Transcript>(s3Keys.attributedTranscript(input.meetingId));
+    if (attributed?.speakerAttribution?.version === 2) {
+      if (attributed.meetingId !== input.meetingId) throw new Error("attributed transcript meeting mismatch");
+      // The knowledge base consumes this markdown. Keep it in sync with the
+      // transcript shown in the UI; the original JSON remains untouched.
+      await s3.send(new PutObjectCommand({ Bucket: env.dataBucket, Key: s3Keys.transcriptMd(input.meetingId),
+        Body: transcriptToMarkdown(attributed, input.title), ContentType: "text/markdown; charset=utf-8" }));
+    }
   }
   const { notesKey } = await putFinalDocument(input.ownerSub, doc);
   const now = new Date().toISOString();
-  await updateMeeting(input.meetingId, { status: "COMPLETED", notesKey, completedAt: input.briefOnly ? meeting.completedAt ?? now : now, currentStage: "done" }, undefined, ["briefOnly", "briefStatus", "briefError", "briefExecutionArn"]);
+  await updateMeeting(input.meetingId, { status: "COMPLETED", notesKey, speakerCount: doc.speakers.length, completedAt: input.briefOnly ? meeting.completedAt ?? now : now, currentStage: "done" }, undefined, ["briefOnly", "briefStatus", "briefError", "briefExecutionArn"]);
   try {
     if (!input.briefOnly) await recordMemory(input, doc);
   } catch (err) {

@@ -91,7 +91,9 @@ def test_backfill_workdir_uses_current_document_without_old_stage_files(monkeypa
 
     class FakeS3:
         def head_object(self, **kwargs):
-            raise FileNotFoundError("no separate attributed transcript")
+            from botocore.exceptions import ClientError
+
+            raise ClientError({"Error": {"Code": "404"}}, "HeadObject")
 
         def download_file(self, bucket, key, destination):
             downloads.append(key)

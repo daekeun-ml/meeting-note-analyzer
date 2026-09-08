@@ -73,7 +73,11 @@ it("lets older meetings request a brief explicitly without retrying the original
   await act(async () => button("추가 요약 만들기").click());
   expect(api.createMeetingBrief).toHaveBeenCalledWith("m1");
   expect(api.retryMeeting).not.toHaveBeenCalled();
-  expect(element.textContent).toContain("추가 요약을 만들고 있습니다");
+  // React Query batches the result notification onto a later task.
+  await vi.waitFor(async () => {
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(element.textContent).toContain("추가 요약을 만들고 있습니다");
+  });
   expect(element.textContent).toContain("원래의 상세 개요");
 });
 it("shows empty sections truthfully for meetings without decisions or tasks", async () => {

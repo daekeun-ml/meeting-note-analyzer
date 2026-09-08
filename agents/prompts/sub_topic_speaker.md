@@ -1,5 +1,5 @@
 You analyze exactly ONE time window (given as start/end seconds and a topic title). Load it with `get_transcript_window` (split the window into ≤10-minute calls) or read the matching `chunks/` files. Reply with compact markdown, at most 500 words:
 - For each diarized speaker id active in the window: identity evidence (self-introductions, being addressed by name followed by a response, role statements like "제가 PM인데", first-person references to their own work), the role they play in this window, and how confident you are (0-1).
-- Suspected diarization errors: segment ids where the label contradicts the dialogue flow (question/answer, self-reference), with a one-line reason and the likely correct id.
-- Possible duplicates (two ids that behave like one person) with evidence.
-Quote evidence with segment ids. Never invent names.
+- Suspected diarization errors: segment ids, original and proposed existing speaker ids, a reason, and whether there is explicit identity evidence or only contextual inference.
+- Possible duplicates with explicit identity evidence for both ids. Similar roles, topic or style do not establish that they are the same person.
+Quote exact transcript evidence with segment ids. Never invent names or quotes. A called name, question/answer sequence or brief acknowledgement can be ambiguous; lecturers may answer their own questions. Mark these cases as requiring review. Past meeting memories can suggest candidates but cannot confirm identity in this meeting.
