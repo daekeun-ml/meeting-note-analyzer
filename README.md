@@ -2,7 +2,7 @@
 
 Meeting Note Analyzer turns meeting recordings and lecture videos into notes you can review and search. It runs in your AWS account, with a React web app, Cognito login, SageMaker transcription, and analysis on Amazon Bedrock AgentCore.
 
-The app uses the CloudFront URL created during deployment. A domain name, Route 53 hosted zone, TLS certificate, and Google OAuth application are not required. Administrators create Cognito accounts; users sign in with their email address and password.
+The app uses the CloudFront URL created during deployment, with HTTPS provided by CloudFront's default certificate. You do not need to register a domain, configure Route 53, provision your own certificate, or set up Google OAuth. Administrators create Cognito accounts; users sign in with their email address and password.
 
 ## Features
 
@@ -11,9 +11,18 @@ The app uses the CloudFront URL created during deployment. A domain name, Route 
 - **Lecture study:** upload an MP4, optionally with a PPTX or PDF. The pipeline matches screen content with spoken explanations and generates notes, questions, flashcards, and reference links.
 - **Paper search:** lecture references are retrieved through the AgentCore Web Search MCP connector and Gateway.
 - **Chat:** ask questions about your meeting and lecture material with source references.
-- **Background processing:** uploads continue through server-side workflows after the browser closes. Web Push notifications are optional.
+- **Background processing:** once the upload finishes and processing starts, analysis continues on the server after the browser closes. Keep the upload page open until then. Web Push notifications are optional.
 
 The interface is in Korean. Meeting and lecture outputs can be requested in Korean, English, or the source language.
+
+## Supported files
+
+| Use | Required input | Optional attachment | Limits |
+| --- | --- | --- | --- |
+| Meeting | MP3 | None | 500 MiB, up to 4 hours |
+| Lecture | MP4 | PPTX or PDF | Video: 4 GiB, up to 4 hours and 4K. Slides: 100 MiB, up to 120 pages. |
+
+For lecture playback, use a browser-compatible MP4 encoding such as H.264/AAC. See [lecture study](docs/lecture-study.md) for screen matching and research limits.
 
 ## Architecture
 
@@ -24,24 +33,27 @@ flowchart LR
     CF --> Site[Private S3 web assets]
     CF --> API[API Gateway and Lambda]
     CF --> Relay[Chat streaming Lambda]
-    CF --> Files[S3 recordings and results]
+    CF -->|Signed uploads| Files[S3 recordings and results]
+    User -->|Signed downloads| Files
     API --> DB[DynamoDB]
-    Files --> Events[EventBridge]
+    Files -->|Completed MP3 uploads| Events[EventBridge]
     Events --> Workflow[Step Functions]
-    API --> Workflow
+    API -->|Start or retry processing| Workflow
     Workflow --> STT[SageMaker async STT]
     Workflow --> Agents[AgentCore analysis runtimes]
     Agents --> Bedrock[Bedrock models]
     Agents --> Search[AgentCore Gateway and Web Search]
     Relay --> Chat[AgentCore chat runtime]
-    Chat --> KB[Bedrock knowledge base]
+    Chat --> Bedrock
+    Chat --> KB[AgentCore Gateway and knowledge base]
 ```
 
 CDK defines separate stacks for storage, authentication, transcription, analysis, lectures, chat, orchestration, API, and web hosting. Local deployment settings and generated AWS identifiers are excluded from Git.
 
 ## Prerequisites
 
-- Node.js 22 or newer, Python 3.12 or newer, [uv](https://docs.astral.sh/uv/), and AWS CLI v2.
+- Linux, macOS, or WSL2 with Bash.
+- Node.js 22 or newer, Python 3.12 or newer available as `python3`, [uv](https://docs.astral.sh/uv/), and AWS CLI v2.
 - Docker with Buildx and support for `linux/amd64` and `linux/arm64` builds.
 - AWS credentials allowed to bootstrap CDK and create the resources in this project.
 - Bedrock access to the configured Claude models and a SageMaker GPU endpoint quota of at least one instance.
@@ -51,13 +63,18 @@ Start with `us-east-1`. Check regional availability for AgentCore Web Search, ma
 
 ## Deploy
 
+Deployment creates billable AWS resources, including GPU transcription capacity and model calls. Read the [deployment prerequisites](docs/deployment.md#before-you-start) before starting.
+
+AWS CLI credentials are used for deployment and administration. They are separate from the Cognito accounts used to sign in to the app.
+
+Choose an existing AWS CLI profile with deployment permissions. If it uses IAM Identity Center, sign in with `aws sso login --profile your-profile` first. For a new SSO profile, use `aws configure sso --profile your-profile`. Other AWS credential methods do not require SSO.
+
 ```bash
 git clone https://github.com/mateon01/meeting-note-analyzer.git
 cd meeting-note-analyzer
 npm ci
 
-# Use your usual AWS CLI profile or SSO session.
-aws sso login --profile your-profile
+# Replace your-profile with your configured AWS CLI profile.
 export AWS_PROFILE=your-profile
 
 npm run configure -- --email you@example.com
@@ -70,11 +87,11 @@ npm run user:create
 
 `configure` writes `deploy.local.json`. `secrets` prompts for the Hugging Face token and generates VAPID keys in Secrets Manager. Passwords and tokens are not stored in the project configuration.
 
-The first deployment prepares the STT models in CodeBuild, creates the application, then applies the generated CloudFront address to Cognito and the backend configuration. CDK displays IAM permission changes for approval. Subsequent deployments reuse the models and update the existing stacks.
+The first deployment prepares the STT models in CodeBuild and creates the application. A second CDK pass registers the generated CloudFront address with Cognito and updates the backend configuration. Both passes are handled by `npm run deploy`. CDK displays IAM permission changes for approval. Subsequent deployments reuse the models and saved site URL.
 
 `user:create` prompts for a password and creates the first Cognito account. The deploy command prints the CloudFront address to open.
 
-This creates billable resources. Read the [full deployment guide](docs/deployment.md) before starting a deployment.
+After deployment, run `npm run check:deployment`, then sign in and upload a short recording. `doctor` checks tools, AWS identity, and model profile discovery; it does not verify GPU quotas or run model inference. The [full deployment guide](docs/deployment.md#6-test-the-installation) covers the application checks.
 
 ## Common commands
 
@@ -86,27 +103,31 @@ This creates billable resources. Read the [full deployment guide](docs/deploymen
 | `npm run check:deployment` | Check web configuration and Cognito callback URLs |
 | `npm run user:create -- --email teammate@example.com` | Create another login |
 | `npm run user:password -- --email teammate@example.com` | Set an existing user's password |
-| `npm run models:publish` | Download and publish STT model files again |
+| `npm run models:publish` | Republish STT weights; see [model updates](docs/operations.md#model-files-and-instance-changes) before redeploying |
 | `npm run dev:config` | Prepare ignored configuration for local frontend development |
 
 Use one checkout per AWS account, region, and installation. The deployment helper records that identity locally and rejects accidental switches. Resource names start with `meeting-analyzer` and stack names with `MeetingAnalyzer` by default; change both before the first deployment if needed.
 
 ## Development
 
+Run these commands from the repository root after `npm ci`. The synthesis command uses an example account number for a template check only.
+
 ```bash
 npm run typecheck
 npm test
 npm run test:deploy
 npm -w web run build
-npm run synth
+CDK_DEFAULT_ACCOUNT=000000000000 CDK_DEFAULT_REGION=us-east-1 AWS_EC2_METADATA_DISABLED=true npm run synth
 
 uv sync --project agents --frozen --extra dev
-uv run --directory agents --extra dev pytest -q
+AWS_EC2_METADATA_DISABLED=true uv run --directory agents --extra dev pytest -q
 uv sync --project lecture --frozen --extra dev
-uv run --directory lecture --extra dev pytest -q
+AWS_EC2_METADATA_DISABLED=true uv run --directory lecture --extra dev pytest -q
 uv sync --project stt --frozen --extra dev
-uv run --directory stt --extra dev pytest -q
+AWS_EC2_METADATA_DISABLED=true uv run --directory stt --extra dev pytest -q
 ```
+
+Install FFmpeg, including `ffprobe`, to run the video tests and LibreOffice to run the PPTX conversion test. Those tests are skipped when the tools are missing. The default STT development environment also skips the PyTorch-dependent diarization test.
 
 For a local frontend connected to your deployed backend:
 

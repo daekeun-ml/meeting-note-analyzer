@@ -24,9 +24,10 @@ Model weights are downloaded during setup. They are not included in this Git rep
 
 ## 1. Install and configure
 
+Use an existing AWS CLI profile with deployment permissions. For an IAM Identity Center profile, run `aws sso login --profile your-profile` first; configure a new SSO profile with `aws configure sso --profile your-profile` if needed. SSO is not required when you use another AWS credential method. These credentials manage AWS resources, while app users sign in with separate Cognito accounts.
+
 ```bash
 npm ci
-aws sso login --profile your-profile
 export AWS_PROFILE=your-profile
 npm run configure -- --email you@example.com
 ```

@@ -30,7 +30,7 @@ The public repository starts with a new history. Its commit identity uses the ma
 | npm audit, including development dependencies | No known vulnerabilities reported at review time |
 | TypeScript tests and type checks | Passed |
 | Deployment helper and source-check tests | Passed |
-| Python meeting-agent and STT tests | Passed; the local STT environment skips the optional CrisperWhisper integration test |
+| Python meeting-agent and STT tests | Passed; the local STT environment skips the PyTorch-dependent diarization test |
 | Lecture tests inside the lecture container | 36 passed, including FFmpeg tests |
 | Meeting, chat, lecture, and STT container image builds | Passed for their target architectures |
 | Initial and active CDK configurations | Synthesized; template checks confirmed default CloudFront hosting and native Cognito authentication |
