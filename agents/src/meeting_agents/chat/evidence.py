@@ -20,8 +20,16 @@ def _start_sec(text: str) -> int | None:
     return int(h_or_m) * 3600 + int(m2) * 60 + int(s)
 
 
+_REVIEW_MARKER = "[speaker review required]"
+
+
+def display_snippet(text: str) -> str:
+    """Evidence text is shown to the user as well as the model: the transcript's review marker reads as Korean."""
+    return text.replace(_REVIEW_MARKER, "(화자 검토 필요)").replace("[speaker name review required]", "(이름 검토 필요)")
+
+
 def _snippet(text: str, limit: int = 420) -> str:
-    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+", " ", display_snippet(text)).strip()
     return text if len(text) <= limit else text[: limit - 3].rstrip() + "..."
 
 

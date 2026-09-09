@@ -69,3 +69,32 @@ it("opens the section named in the page query parameter", async () => {
   expect(element.textContent).toContain("수식과 정리");
   expect(element.textContent).not.toContain("학습 목표");
 });
+
+it("docks the video as a pinned mini player only while it is playing and scrolled out of view", async () => {
+  const observers: ((entries: { isIntersecting: boolean }[]) => void)[] = [];
+  (globalThis as unknown as { IntersectionObserver: unknown }).IntersectionObserver = class { constructor(cb: (entries: { isIntersecting: boolean }[]) => void) { observers.push(cb); } observe() {} unobserve() {} disconnect() {} };
+  await act(async () => root.unmount()); element.remove();
+  const withVideo = { ...fixture(), videoUrl: "https://example.org/lecture.mp4" };
+  api.lectureResult.mockResolvedValue(withVideo); client.setQueryData(["lecture", "test"], withVideo);
+  element = document.createElement("div"); document.body.appendChild(element); root = createRoot(element);
+  await act(async () => root.render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/lectures/test"]}><Routes><Route path="/lectures/:id" element={<LecturePage />} /></Routes></MemoryRouter></QueryClientProvider>));
+  const video = element.querySelector("video")!; const dock = () => element.querySelector('[data-testid="video-dock"]');
+  expect(observers).toHaveLength(1);
+  await act(async () => { observers[0]!([{ isIntersecting: false }]); }); // scrolled past while paused: nothing happens
+  expect(dock()).toBeNull();
+  expect(element.textContent).not.toContain("펼치기");
+  await act(async () => { video.dispatchEvent(new Event("play")); });
+  await act(async () => { observers[0]!([{ isIntersecting: false }]); });
+  expect(dock()?.className).toContain("sticky");
+  expect(element.textContent).toContain("펼치기");
+  expect(video.hasAttribute("controls")).toBe(false);
+  await act(async () => { video.dispatchEvent(new Event("pause")); }); // pausing keeps the mini player until the user scrolls back up
+  expect(dock()).not.toBeNull();
+  await act(async () => { observers[0]!([{ isIntersecting: true }]); });
+  expect(dock()).toBeNull();
+  expect(video.hasAttribute("controls")).toBe(true);
+});
+
+it("wraps a long lecture title in the page header", async () => {
+  expect(element.querySelector("h1")?.className).toContain("[overflow-wrap:anywhere]");
+});

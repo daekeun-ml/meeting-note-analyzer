@@ -58,6 +58,6 @@ export const transcriptSchema = sttOutputSchema.extend({
     speakerCorrectionIds: z.array(z.string()).optional(),
     speakerReviewRequired: z.boolean().optional(),
   })),
-  speakers: z.array(sttSpeakerSchema.extend({ label: z.string().optional() })),
+  speakers: z.array(sttSpeakerSchema.extend({ label: z.string().optional(), reviewRequired: z.boolean().optional(), proposedLabel: z.string().optional(), nameConfirmedByUser: z.boolean().optional() })),
 });
 export type Transcript = z.infer<typeof transcriptSchema>;

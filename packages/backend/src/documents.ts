@@ -27,9 +27,8 @@ export function kbMetadata(ownerSub: string, doc: NotesDocument): string {
 }
 
 /** Write document.json + document.md, then the two sidecars: their ObjectCreated events start the KB ingestion. */
-export async function putFinalDocument(ownerSub: string, doc: NotesDocument): Promise<{ notesKey: string }> {
-  const notesKey = s3Keys.notesJson(doc.meetingId);
-  const mdKey = s3Keys.notesMd(doc.meetingId);
+export async function putFinalDocument(ownerSub: string, doc: NotesDocument, notesKey = s3Keys.notesJson(doc.meetingId)): Promise<{ notesKey: string }> {
+  const mdKey = notesKey.replace(/\.json$/, ".md");
   await Promise.all([
     s3.send(new PutObjectCommand({ Bucket: env.dataBucket, Key: notesKey, Body: JSON.stringify(doc), ContentType: "application/json" })),
     s3.send(new PutObjectCommand({ Bucket: env.dataBucket, Key: mdKey, Body: notesToMarkdown(doc), ContentType: "text/markdown; charset=utf-8" })),

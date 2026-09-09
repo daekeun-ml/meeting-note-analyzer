@@ -186,7 +186,8 @@ class FollowUpItem(Strict):
     id: str
     title: str
     ownerSpeakerId: str | None = None
-    ownerName: str | None = None
+    # A display name only (name or role); caveats about uncertain attribution belong in the transcript review, not here.
+    ownerName: str | None = Field(default=None, max_length=30)
     dueHint: str | None = None
     priority: Literal["high", "medium", "low"]
     evidenceSegmentIds: list[str] = Field(default_factory=list)

@@ -12,6 +12,13 @@ def hms(sec: float) -> str:
     return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
 
 
+def identity_review_lines(speakers: list[dict], active_ids: set[str] | None = None) -> list[str]:
+    """Name uncertainty is recorded once per speaker, separately from utterance assignment."""
+    return [f"- {s['id']}: [speaker name review required]" + (f" candidate: {s['proposedLabel']}" if s.get("proposedLabel") else "")
+            for s in speakers if s.get("reviewRequired") and not s.get("nameConfirmedByUser")
+            and (active_ids is None or s["id"] in active_ids)]
+
+
 @dataclass
 class Transcript:
     data: dict[str, Any]
@@ -39,7 +46,8 @@ class Transcript:
 
     def to_markdown(self, title: str) -> str:
         head = [f"# {title}", "", f"- duration: {hms(self.duration)}, language: {self.data.get('language')}, speakers: {', '.join(s['id'] for s in self.data.get('speakers', []))}", ""]
-        return "\n".join(head + [self.segment_line(s) for s in self.segments]) + "\n"
+        reviews = identity_review_lines(self.data.get("speakers", []))
+        return "\n".join(head + reviews + ([""] if reviews else []) + [self.segment_line(s) for s in self.segments]) + "\n"
 
     def chunks(self, minutes: int) -> list[tuple[int, float, float, list[dict[str, Any]]]]:
         """Split by wall-clock windows; returns (index, start, end, segments)."""
@@ -62,7 +70,8 @@ class Transcript:
         paths = []
         for idx, start, end, segs in self.chunks(minutes):
             p = directory / f"chunk-{idx:02d}.md"
-            body = [f"# {title}: chunk {idx} ({hms(start)}-{hms(end)})", ""] + [self.segment_line(s) for s in segs]
+            reviews = identity_review_lines(self.data.get("speakers", []), {s["speaker"] for s in segs})
+            body = [f"# {title}: chunk {idx} ({hms(start)}-{hms(end)})", "", *reviews, ""] + [self.segment_line(s) for s in segs]
             p.write_text("\n".join(body) + "\n", encoding="utf-8")
             paths.append(p)
         return paths

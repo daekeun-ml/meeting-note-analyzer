@@ -17,7 +17,7 @@ export function LecturesPage() {
     {!query.isLoading && !query.error && !lectures.length && <EmptyState illustration={<IconStudy size={52} className="text-accent" />} title="배운 내용을 내 지식으로" description="MP4 강의 영상을 올리세요. 화면과 발언을 함께 분석해 복습 자료와 참고 논문을 정리합니다. PPTX/PDF도 선택하여 첨부할 수 있습니다." action={<Button onClick={() => nav("/upload?kind=lecture")}>첫 강의 정리하기</Button>} />}
     <div className="space-y-3">{lectures.map((lecture) => <Card key={lecture.lectureId} onClick={() => nav(`/lectures/${lecture.lectureId}`)} className="p-4">
       <div className="flex justify-between items-center gap-2"><span className="text-[12px] text-ink-3 truncate">{lecture.course || "강의"}</span><LectureStatus lecture={lecture} /></div>
-      <h2 className="mt-3 font-semibold text-[17px]">{lecture.title}</h2>
+      <h2 className="mt-3 font-semibold text-[17px] [overflow-wrap:anywhere]">{lecture.title}</h2>
       <p className="mt-2 text-[12px] text-ink-3">{formatDate(lecture.createdAt)}{lecture.pageCount ? ` · 학습 항목 ${lecture.pageCount}개` : ""}{lecture.durationSec ? ` · ${Math.round(lecture.durationSec / 60)}분` : ""}</p>
     </Card>)}</div>
     {query.hasNextPage && <Button full variant="secondary" className="mt-4" loading={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>더 보기</Button>}

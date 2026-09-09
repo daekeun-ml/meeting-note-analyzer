@@ -7,14 +7,16 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
 from . import gateway, memory
 from .config import DATA_BUCKET, LECTURE_TABLE_NAME, MAX_RESULTS, REGION, TABLE_NAME, WEB_ORIGIN
-from .evidence import diversify, format_for_model, locate_lecture_pages, to_evidence
+from .evidence import display_snippet, diversify, format_for_model, locate_lecture_pages, to_evidence
 from ..keys import attributed_transcript
+from ..transcript import identity_review_lines
 
 log = logging.getLogger("chat.tools")
 
@@ -53,7 +55,7 @@ def _ddb():
 
 
 def _s3():
-    return boto3.client("s3", region_name=REGION)
+    return boto3.client("s3", region_name=REGION, config=Config(retries={"mode": "standard", "max_attempts": 5}))
 
 
 def _owned_meeting(ctx: TurnContext, meeting_id: str) -> dict | None:
@@ -204,6 +206,19 @@ def _transcript_lines(data: dict, segs: list[dict], doc: dict | None) -> list[st
     return lines
 
 
+def _window_speakers(data: dict, segs: list[dict], doc: dict | None) -> list[dict]:
+    registry = {s["id"]: s for s in data.get("speakers", [])}
+    for speaker in (doc or {}).get("speakers", []):
+        registry[speaker["id"]] = {**registry.get(speaker["id"], {}), **speaker}
+    out = []
+    for sid in dict.fromkeys(s["speaker"] for s in segs):
+        speaker = registry.get(sid, {})
+        pending = bool(speaker.get("reviewRequired") and not speaker.get("nameConfirmedByUser"))
+        out.append({"id": sid, "label": speaker.get("label") or sid, "reviewRequired": pending,
+                    **({"proposedLabel": speaker["proposedLabel"]} if pending and speaker.get("proposedLabel") else {})})
+    return out
+
+
 def build_server(ctx: TurnContext):
     @tool("search_meetings", "Hybrid search over this user's meeting documents, transcripts and lecture study notes (managed knowledge base). Returns passages labeled [E#] that you must cite. Use a focused query; optionally restrict to one meetingId.", {"query": str, "meetingId": str})
     async def search_meetings(args: dict) -> dict:
@@ -252,9 +267,11 @@ def build_server(ctx: TurnContext):
         doc = _read_json(rec["notesKey"]) if rec.get("notesKey") else None
         segs = [s for s in data.get("segments", []) if s.get("end", 0) >= start and s.get("start", 0) <= end]
         lines = _transcript_lines(data, segs[:200], doc)
+        speakers = _window_speakers(data, segs[:200], doc)
+        name_reviews = identity_review_lines(speakers)
         label = f"E{len(ctx.evidence) + 1}"
-        ctx.add([{"id": label, "source": "transcript", "kind": "transcript", "meetingId": mid, "title": rec.get("title"), "date": (rec.get("createdAt") or "")[:10], "meetingType": None, "snippet": " ".join(lines)[:420], "score": None, "startSec": start, "segmentIds": [s.get("id") for s in segs[:5] if s.get("id")], "url": f"{WEB_ORIGIN}/meetings/{mid}?t={start}"}])
-        return _text({"evidenceLabel": label, "lines": lines})
+        ctx.add([{"id": label, "source": "transcript", "kind": "transcript", "meetingId": mid, "title": rec.get("title"), "date": (rec.get("createdAt") or "")[:10], "meetingType": None, "snippet": display_snippet(" ".join(name_reviews + lines))[:420], "score": None, "startSec": start, "segmentIds": [s.get("id") for s in segs[:5] if s.get("id")], "url": f"{WEB_ORIGIN}/meetings/{mid}?t={start}"}])
+        return _text({"evidenceLabel": label, "lines": lines, "speakers": speakers})
 
     @tool("list_lectures", "List this user's analyzed lectures (newest first): lectureId, title, course, date, pageCount. Use it when the user refers to a lecture or class without naming it.", {"limit": int})
     async def list_lectures(args: dict) -> dict:

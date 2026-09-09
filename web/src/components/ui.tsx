@@ -6,11 +6,11 @@ export function Page({ title, subtitle, action, back, children }: { title: React
     <div className="px-4 pt-2">
       {back}
       <header className="flex items-end justify-between gap-3 mb-4 pt-2">
-        <div className="min-w-0">
-          <h1 className="text-[26px] font-bold leading-tight tracking-tight">{title}</h1>
-          {subtitle && <p className="mt-1 text-sm text-ink-2">{subtitle}</p>}
+        <div className="min-w-0 flex-1">
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight [overflow-wrap:anywhere]">{title}</h1>
+          {subtitle && <p className="mt-1 text-sm text-ink-2 [overflow-wrap:anywhere]">{subtitle}</p>}
         </div>
-        {action}
+        {action && <div className="shrink-0">{action}</div>}
       </header>
       {children}
     </div>

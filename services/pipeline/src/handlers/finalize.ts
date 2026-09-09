@@ -1,6 +1,6 @@
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { BedrockAgentCoreClient, CreateEventCommand } from "@aws-sdk/client-bedrock-agentcore";
-import { env, getMeeting, notifyUser, readJson, s3, putFinalDocument } from "@meeting-notes/backend";
+import { env, getMeeting, notifyUser, readJson, s3, putFinalDocument, withDocumentLock } from "@meeting-notes/backend";
 import { STAGES, s3Keys, type MeetingBrief, type NotesDocument, type StageOutputs, type Transcript } from "@meeting-notes/shared";
 import { pipelineEnv } from "../lib/env.js";
 import { updateMeeting } from "../lib/meeting-updates.js";
@@ -65,39 +65,44 @@ async function recordMemory(input: FinalizeInput, doc: NotesDocument): Promise<v
 }
 
 export const handler = async (input: FinalizeInput) => {
-  const meeting = await getMeeting(input.meetingId);
-  if (!meeting || meeting.owner !== input.ownerSub) throw new Error(`meeting ${input.meetingId} not found`);
-  let doc: NotesDocument;
-  if (input.briefOnly) {
-    const previous = meeting.notesKey ? await readJson<NotesDocument>(meeting.notesKey) : null;
-    const brief = await readJson<MeetingBrief>(s3Keys.stageResult(input.meetingId, "meeting_brief"));
-    if (!previous || previous.meetingId !== input.meetingId || !brief) throw new Error("published document or brief missing");
-    // Preserve edited speaker labels, detailed content and the original document date.
-    doc = { ...previous, brief };
-  } else {
-    const transcript = await readJson<Transcript>(input.transcriptKey);
-    if (!transcript) throw new Error(`transcript missing at ${input.transcriptKey}`);
-    const outputs = {} as StageOutputs;
-    for (const stage of STAGES) {
-      const data = await readJson(s3Keys.stageResult(input.meetingId, stage));
-      // Executions started on the old state machine may still finalize during a rolling deployment.
-      if (!data && stage === "meeting_brief" && !input.expectBrief) continue;
-      if (!data) throw new Error(`stage output missing: ${stage}`);
-      (outputs as unknown as Record<string, unknown>)[stage] = data;
+  const { doc, notesKey } = await withDocumentLock(input.meetingId, async () => {
+    const meeting = await getMeeting(input.meetingId, true);
+    if (!meeting || meeting.owner !== input.ownerSub) throw new Error(`meeting ${input.meetingId} not found`);
+    // The execution input carries the title from when the pipeline started; the user may have renamed the meeting since.
+    const title = meeting.title ?? input.title;
+    let doc: NotesDocument;
+    if (input.briefOnly) {
+      const previous = meeting.notesKey ? await readJson<NotesDocument>(meeting.notesKey) : null;
+      const brief = await readJson<MeetingBrief>(s3Keys.stageResult(input.meetingId, "meeting_brief"));
+      if (!previous || previous.meetingId !== input.meetingId || !brief) throw new Error("published document or brief missing");
+      // Preserve edited speaker labels, detailed content and the original document date.
+      doc = { ...previous, brief, title };
+    } else {
+      const transcript = await readJson<Transcript>(input.transcriptKey);
+      if (!transcript) throw new Error(`transcript missing at ${input.transcriptKey}`);
+      const outputs = {} as StageOutputs;
+      for (const stage of STAGES) {
+        const data = await readJson(s3Keys.stageResult(input.meetingId, stage));
+        // Executions started on the old state machine may still finalize during a rolling deployment.
+        if (!data && stage === "meeting_brief" && !input.expectBrief) continue;
+        if (!data) throw new Error(`stage output missing: ${stage}`);
+        (outputs as unknown as Record<string, unknown>)[stage] = data;
+      }
+      doc = assembleNotes({ ...input, title }, transcript, outputs);
+      const attributed = await readJson<Transcript>(s3Keys.attributedTranscript(input.meetingId));
+      if (attributed?.speakerAttribution?.version === 2) {
+        if (attributed.meetingId !== input.meetingId) throw new Error("attributed transcript meeting mismatch");
+        // The knowledge base consumes this markdown. Keep it in sync with the
+        // transcript shown in the UI; the original JSON remains untouched.
+        await s3.send(new PutObjectCommand({ Bucket: env.dataBucket, Key: s3Keys.transcriptMd(input.meetingId),
+          Body: transcriptToMarkdown(attributed, title), ContentType: "text/markdown; charset=utf-8" }));
+      }
     }
-    doc = assembleNotes(input, transcript, outputs);
-    const attributed = await readJson<Transcript>(s3Keys.attributedTranscript(input.meetingId));
-    if (attributed?.speakerAttribution?.version === 2) {
-      if (attributed.meetingId !== input.meetingId) throw new Error("attributed transcript meeting mismatch");
-      // The knowledge base consumes this markdown. Keep it in sync with the
-      // transcript shown in the UI; the original JSON remains untouched.
-      await s3.send(new PutObjectCommand({ Bucket: env.dataBucket, Key: s3Keys.transcriptMd(input.meetingId),
-        Body: transcriptToMarkdown(attributed, input.title), ContentType: "text/markdown; charset=utf-8" }));
-    }
-  }
-  const { notesKey } = await putFinalDocument(input.ownerSub, doc);
-  const now = new Date().toISOString();
-  await updateMeeting(input.meetingId, { status: "COMPLETED", notesKey, speakerCount: doc.speakers.length, completedAt: input.briefOnly ? meeting.completedAt ?? now : now, currentStage: "done" }, undefined, ["briefOnly", "briefStatus", "briefError", "briefExecutionArn"]);
+    const { notesKey } = await putFinalDocument(input.ownerSub, doc, input.briefOnly ? meeting.notesKey : undefined);
+    const now = new Date().toISOString();
+    await updateMeeting(input.meetingId, { status: "COMPLETED", notesKey, speakerCount: doc.speakers.length, completedAt: input.briefOnly ? meeting.completedAt ?? now : now, currentStage: "done" }, undefined, ["briefOnly", "briefStatus", "briefError", "briefExecutionArn"]);
+    return { doc, notesKey };
+  });
   try {
     if (!input.briefOnly) await recordMemory(input, doc);
   } catch (err) {

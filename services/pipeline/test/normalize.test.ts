@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalize } from "../src/handlers/normalize-transcript.js";
+import { assertSpeech, normalize } from "../src/handlers/normalize-transcript.js";
 import { describeError } from "../src/handlers/mark-failed.js";
 import { buildSttRequest } from "../src/handlers/start-transcription.js";
 import { hms } from "../src/lib/transcript-format.js";
@@ -49,5 +49,14 @@ describe("sttOutputSchema", () => {
     const { sttOutputSchema } = await import("@meeting-notes/shared");
     const parsed = sttOutputSchema.parse({ ...base, segments: [{ id: "seg-0001", start: 0, end: 1, speaker: "S1", text: "hi", words: [{ w: "hi", s: 0, e: 1, p: null }] }] });
     expect(parsed.segments[0]?.words[0]?.p).toBeNull();
+  });
+});
+
+describe("assertSpeech", () => {
+  it("stops the pipeline with a clear message when the recording produced no words", () => {
+    // A saturated 7-minute phone recording yielded 0 words after the STT fix; ten analysis stages then ran on nothing.
+    expect(() => assertSpeech(normalize({ ...base, durationSec: 436, segments: [] }))).toThrow("녹음에서 발화를 찾지 못했습니다 (길이 436초)");
+    expect(() => assertSpeech(normalize({ ...base, segments: [{ id: "seg-0001", start: 0, end: 1, speaker: "S1", text: "   ", words: [] }] }))).toThrow("발화");
+    expect(() => assertSpeech(normalize({ ...base, segments: [{ id: "seg-0001", start: 0, end: 1, speaker: "S1", text: "안녕하세요", words: [] }] }))).not.toThrow();
   });
 });

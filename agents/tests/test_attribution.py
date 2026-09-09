@@ -134,7 +134,18 @@ def test_unsupported_names_remain_candidates_and_do_not_reach_downstream_as_fact
     speaker = next(s for s in safe["speakers"] if s["id"] == "S1")
     assert speaker["label"] == "S1" and "role" not in speaker
     assert speaker["proposedLabel"] == "진행자" and speaker["reviewRequired"]
-    assert "S1 [speaker review required]" in Transcript(out).to_markdown("회의")
+    assert safe["reviewItems"][0]["kind"] == "label" and safe["reviewItems"][0]["segmentIds"] == []
+    assert all(not s["speakerReviewRequired"] for s in out["segments"])  # a name review never flags the utterances themselves
+    assert "speaker review required" not in Transcript(out).to_markdown("회의")
+
+
+def test_neutral_label_with_a_name_is_reviewed_as_that_name():
+    safe, out = reconcile(speakers=[{"id": "S2", "label": "S2", "name": "이지수", "confidence": 0.9, **decision(1)}])
+    speaker = next(s for s in safe["speakers"] if s["id"] == "S2")
+    assert speaker["label"] == "이지수" and not speaker["reviewRequired"]
+    safe, _ = reconcile(speakers=[{"id": "S2", "label": "S2", "name": "이지수", "confidence": 0.5}])
+    speaker = next(s for s in safe["speakers"] if s["id"] == "S2")
+    assert speaker["label"] == "S2" and speaker["proposedLabel"] == "이지수" and speaker["reviewRequired"]
 
 
 def test_anonymous_and_missing_speakers_remain_valid_without_forced_guesses():
@@ -153,3 +164,23 @@ def test_invented_and_duplicate_speaker_names_are_reported():
     assert all(s["label"] == s["id"] for s in safe["speakers"])
     assert safe["reviewItems"][-1]["issues"] == ["invalid_speaker"]
     assert safe["reviewItems"][-1]["segmentIds"] == []
+
+
+def test_neutral_labels_with_identical_names_are_reviewed_before_confirmation():
+    safe, _ = reconcile(speakers=[
+        {"id": "S1", "label": "S1", "name": "동일 이름", **decision(0)},
+        {"id": "S2", "label": "화자 2", "name": "동일 이름", **decision(1)},
+    ])
+    for speaker in safe["speakers"]:
+        if speaker["id"] in ("S1", "S2"):
+            assert speaker["reviewRequired"] and speaker["label"] == speaker["id"]
+    assert all("ambiguous_identity" in item["issues"] for item in safe["reviewItems"])
+
+
+def test_neutral_label_and_named_label_use_the_same_duplicate_comparison():
+    safe, _ = reconcile(speakers=[
+        {"id": "S1", "label": "S1", "name": "동일 이름", **decision(0)},
+        {"id": "S2", "label": "동일 이름", **decision(1)},
+    ])
+    assert len(safe["reviewItems"]) == 2
+    assert all("ambiguous_identity" in item["issues"] for item in safe["reviewItems"])

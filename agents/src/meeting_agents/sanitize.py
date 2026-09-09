@@ -5,6 +5,7 @@ The prompts forbid these characters, but a model can still slip one in; this kee
 from __future__ import annotations
 
 import re
+from copy import deepcopy
 from typing import Any
 
 _REPLACEMENTS = [("·", ", "), ("ㆍ", ", "), ("•", ""), ("→", " -> "), ("—", " - "), ("―", " - "), ("–", "-")]
@@ -31,3 +32,13 @@ def clean_output(value: Any) -> Any:
     if isinstance(value, dict):
         return {k: clean_output(v) for k, v in value.items()}
     return value
+
+
+def clean_attribution(draft: dict[str, Any]) -> dict[str, Any]:
+    """Speaker attribution: clean names, roles, reasons and notes, but keep `support[].quote` verbatim so the quotes still verify against the transcript."""
+    out = clean_output(draft)
+    for key in ("speakers", "merges", "relabels"):
+        for original, cleaned in zip(draft.get(key, []), out.get(key, []), strict=True):
+            if "support" in original:
+                cleaned["support"] = deepcopy(original["support"])
+    return out

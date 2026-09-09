@@ -74,7 +74,7 @@ export class ApiStack extends Stack {
     const routes: [string, apigw.HttpMethod[]][] = [
       ["/api/me", [apigw.HttpMethod.GET]],
       ["/api/meetings", [apigw.HttpMethod.GET, apigw.HttpMethod.POST]],
-      ["/api/meetings/{id}", [apigw.HttpMethod.GET, apigw.HttpMethod.DELETE]],
+      ["/api/meetings/{id}", [apigw.HttpMethod.GET, apigw.HttpMethod.PATCH, apigw.HttpMethod.DELETE]],
       ["/api/meetings/{id}/result", [apigw.HttpMethod.GET]],
       ["/api/meetings/{id}/complete-upload", [apigw.HttpMethod.POST]],
       ["/api/meetings/{id}/retry", [apigw.HttpMethod.POST]],

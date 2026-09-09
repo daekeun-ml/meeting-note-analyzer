@@ -213,3 +213,11 @@ def test_compact_document_exposes_the_brief_without_unsupported_reasons():
     assert out["decisions"][0]["process"] == "테스트 기간 부족" and out["decisions"][1]["process"] == ""
     assert out["openQuestions"] == ["출시일"]
     assert compact_document({"summary": {}, "speakers": [], "agenda": [], "followUps": [], "suggestions": []}, "m1")["brief"] is None
+
+
+def test_review_marker_reads_as_korean_in_evidence_snippets():
+    results = [{"content": {"text": "[00:10] S1 [speaker review required] (seg-1): 제가 맡겠습니다"}, "score": 0.5,
+                "location": {"s3Location": {"uri": "s3://data/transcripts/m1/transcript.md"}}, "metadata": {"meetingId": "m1", "title": "회의"}}]
+    item = evidence.to_evidence(results, web_origin="https://x", start_index=0)[0]
+    assert "(화자 검토 필요)" in item["snippet"] and "speaker review required" not in item["snippet"]
+    assert evidence.display_snippet("A [speaker review required]: B") == "A (화자 검토 필요): B"

@@ -13,6 +13,8 @@ import {
   requireOwnedMeeting,
   renameSpeakers,
   retryMeeting,
+  updateMeetingSchema,
+  updateMeetingTitle,
   updateSpeakersSchema,
 } from "../routes/meetings.js";
 import { subscribe, subscriptionSchema, unsubscribe, unsubscribeSchema } from "../routes/push.js";
@@ -41,6 +43,7 @@ const routes: Record<string, Route> = {
     const rec = await requireOwnedMeeting(caller, pathParam(event, "id"));
     return json(200, { meeting: toMeetingDto(rec) });
   },
+  "PATCH /api/meetings/{id}": async (event) => json(200, await updateMeetingTitle(callerFrom(event), pathParam(event, "id"), parseBody(event, updateMeetingSchema))),
   "POST /api/meetings/{id}/complete-upload": async (event) => {
     const caller = callerFrom(event);
     await completeUpload(caller, pathParam(event, "id"), parseBody(event, completeUploadSchema));

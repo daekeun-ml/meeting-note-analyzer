@@ -17,6 +17,15 @@ def _normalized(text: str) -> str:
     return " ".join(text.split())
 
 
+def _proposed_label(proposal: dict) -> str:
+    speaker_id = proposal["id"]
+    label = proposal["label"].strip()
+    neutral = {speaker_id, f"Speaker {speaker_id.removeprefix('S')}", f"화자 {speaker_id.removeprefix('S')}"}
+    if label in neutral:
+        return next((value.strip() for value in (proposal.get("name"), proposal.get("role")) if value and value.strip()), "")
+    return label
+
+
 def reconcile_attribution(transcript: dict[str, Any], draft: dict[str, Any]) -> tuple[dict, dict]:
     segments = transcript["segments"]
     by_id = {s["id"]: s for s in segments}
@@ -128,22 +137,23 @@ def reconcile_attribution(transcript: dict[str, Any], draft: dict[str, Any]) -> 
         proposals = candidates.get(speaker_id, [])
         info = {"id": speaker_id, "label": speaker_id, "confidence": 0, "evidence": [], "reviewRequired": False}
         for proposal in proposals:
-            label = proposal["label"].strip()
-            # Anonymous labels do not claim an identity and need no name review.
+            label = _proposed_label(proposal)
+            # Anonymous labels do not claim an identity; a name or role given alongside one is the actual proposal.
             neutral = {speaker_id, f"Speaker {speaker_id.removeprefix('S')}", f"화자 {speaker_id.removeprefix('S')}"}
-            if label in neutral and not proposal.get("name") and not proposal.get("role"):
+            if proposal["label"].strip() in neutral and not label:
                 continue
             proposal = {**proposal, "label": label}
             issues, evidence = inspect(proposal, {speaker_id})
             if len(proposals) != 1:
                 issues.append("conflicting_proposals")
-            if any(other != speaker_id and other in effective_ids and any(p["label"].strip() == label for p in values)
+            if any(other != speaker_id and other in effective_ids and any(_proposed_label(p) == label for p in values)
                    for other, values in candidates.items()):
                 issues.append("ambiguous_identity")
             if not label:
                 issues.append("invalid_label")
-            affected = [s["id"] for s in out["segments"] if s["speaker"] == speaker_id]
-            correction = record("label", proposal, [speaker_id], affected, issues, evidence)
+            # A name proposal questions who the speaker is called, not which utterances are theirs: it is reviewed
+            # per speaker (summary card, transcript hint) and never marks every utterance as uncertain.
+            correction = record("label", proposal, [speaker_id], [], issues, evidence)
             if issues:
                 info.update(reviewRequired=True, proposedLabel=label, reviewReason=", ".join(correction["issues"]))
             else:

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LecturePage as PageData } from "@meeting-notes/shared";
@@ -18,10 +18,25 @@ export function LecturePage() {
   const [tab, setTab] = useState<Tab>(requestedPage ? "pages" : "overview"); const [pageIndex, setPageIndex] = useState(0);
   const [pendingPage, setPendingPage] = useState(requestedPage);
   const player = useRef<AudioPlayerHandle>(null);
+  // Mini player: only while playing, once the full player has scrolled out of view; it stays docked (even paused) until the user scrolls back up.
+  const [docked, setDocked] = useState(false); const sentinel = useRef<HTMLDivElement>(null); const playing = useRef(false); const pastPlayer = useRef(false);
   const query = useQuery({ queryKey: ["lecture", id], queryFn: () => api.lectureResult(id),
     refetchInterval: (q) => q.state.data && ["UPLOADED", "PREPARING", "TRANSCRIBING", "ANALYZING"].includes(q.state.data.lecture.status) ? 5000 : false });
   const [audioUrl, refreshAudio] = useStableUrl(query.data?.audioUrl ?? null);
   const [videoUrl, refreshVideo] = useStableUrl(query.data?.videoUrl ?? null);
+  useEffect(() => {
+    const target = sentinel.current;
+    if (!target || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry) return;
+      pastPlayer.current = !entry.isIntersecting;
+      if (entry.isIntersecting) setDocked(false);
+      else if (playing.current) setDocked(true);
+    });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [videoUrl]);
+  const onPlayingChange = (next: boolean) => { playing.current = next; if (next && pastPlayer.current) setDocked(true); };
   const retry = useMutation({ mutationFn: () => api.retryLecture(id), onSuccess: async () => { await qc.invalidateQueries({ queryKey: ["lecture", id] }); await qc.invalidateQueries({ queryKey: ["lectures"] }); } });
   const start = useMutation({ mutationFn: () => api.startLecture(id), onSuccess: () => qc.invalidateQueries({ queryKey: ["lecture", id] }) });
   const remove = useMutation({ mutationFn: () => api.deleteLecture(id), onSuccess: async () => { await qc.invalidateQueries({ queryKey: ["lectures"] }); nav("/lectures"); } });
@@ -39,7 +54,14 @@ export function LecturePage() {
     {lecture.status === "FAILED" && <Card className="mt-5 p-4"><p className="font-semibold text-danger">분석을 완료하지 못했습니다</p><p className="mt-2 text-sm text-ink-2">완료된 단계의 자료를 재사용해 이어서 처리할 수 있습니다.</p><details className="mt-3 text-xs text-ink-3"><summary className="cursor-pointer">오류 상세</summary><p className="mt-2 break-all">{lecture.error}</p></details></Card>}
     {(lecture.status === "FAILED" || (lecture.status === "COMPLETED" && (lecture.researchFailures ?? 0) > 0)) && <Button full className="mt-3" loading={retry.isPending} icon={<IconRefresh size={16} />} onClick={() => retry.mutate()}>{lecture.status === "COMPLETED" ? "논문 검색 다시 시도" : "완료된 작업부터 이어서 처리"}</Button>}
     {(retry.error || start.error || remove.error) && <InlineError>{(retry.error || start.error || remove.error)?.message}</InlineError>}
-    {videoUrl && <div className="sticky top-0 z-10 -mx-4 px-4 py-3 mt-3 bg-bg/95 backdrop-blur"><VideoPlayer ref={player} src={videoUrl} onRefresh={async () => { await query.refetch(); refreshVideo(); }} /></div>}
+    {videoUrl && <>
+      <div ref={sentinel} aria-hidden className="h-px" />
+      <div data-testid={docked ? "video-dock" : undefined} className={docked ? "sticky top-0 z-10 -mx-4 px-4 py-2 mt-3 bg-bg/95 backdrop-blur" : "mt-3"}>
+        <VideoPlayer ref={player} src={videoUrl} title={lecture.title} compact={docked} onPlayingChange={onPlayingChange}
+          onExpand={() => { window.document.querySelector(".app-shell > main")?.scrollTo({ top: 0, behavior: "smooth" }); setDocked(false); }}
+          onRefresh={async () => { await query.refetch(); refreshVideo(); }} />
+      </div>
+    </>}
     {document && <>
       {audioUrl && !videoUrl && <div className="sticky top-0 z-10 -mx-4 px-4 py-3 mt-3 bg-bg/95 backdrop-blur"><AudioPlayer ref={player} src={audioUrl} onError={() => { void query.refetch().then(() => refreshAudio()); }} /></div>}
       <Segmented className="mt-3" value={tab} onChange={setTab} options={[{ value: "overview", label: "전체 정리" }, { value: "pages", label: document.videoAnalysis ? "구간별 학습" : "장표별 학습" }, { value: "cards", label: "복습 카드" }]} />

@@ -131,6 +131,25 @@ it("manual name confirmation clears only name review, leaving membership review 
   expect(element.textContent).toContain("사용자가 확인한 이름");
   expect(element.textContent).toContain("검토 필요 1건");
 });
+it("renews an expired audio URL, preserves position, and limits automatic recovery", async () => {
+  const renew = vi.fn().mockResolvedValue({ audioUrl: audioUrl.replace("sig=1", "sig=renewed") });
+  props.onRefreshUrls = renew;
+  await render();
+  const audio = element.querySelector("audio")!; audio.currentTime = 18;
+  await act(async () => audio.dispatchEvent(new Event("error"))); await settle();
+  expect(renew).toHaveBeenCalledTimes(1);
+  expect(audio.src).toContain("sig=renewed");
+  audio.currentTime = 0; // browsers reset the position when src changes
+  await act(async () => audio.dispatchEvent(new Event("loadedmetadata")));
+  expect(audio.currentTime).toBe(18);
+  await act(async () => audio.dispatchEvent(new Event("error")));
+  expect(renew).toHaveBeenCalledTimes(1);
+  expect(button("오디오 다시 연결")).toBeDefined();
+  renew.mockResolvedValue({ audioUrl: audioUrl.replace("sig=1", "sig=retry") });
+  await act(async () => button("오디오 다시 연결").click()); await settle();
+  expect(renew).toHaveBeenCalledTimes(2);
+  expect(audio.src).toContain("sig=retry");
+});
 it("restores all speech if manual confirmation resolves the last visible name review", async () => {
   const t = corrected();
   t.speakerAttribution!.corrections = [{ id: "c2", kind: "label", from: ["S1"], to: "S1", proposedLabel: "후보 이름", status: "review_required", reason: "", issues: ["context_only"], evidence: [], segmentIds: ["seg-1"] }];
@@ -141,4 +160,13 @@ it("restores all speech if manual confirmation resolves the last visible name re
   props = { ...props, confirmedSpeakerNames: ["S1"] };
   await render();
   expect(segments()).toHaveLength(3);
+});
+it("shows a proposed name as a hint next to an unconfirmed speaker, only in the corrected view", async () => {
+  props = { ...props, proposedLabels: { S1: "김민수" } };
+  await render();
+  const segment = element.querySelector('[data-segment-id="seg-1"]')?.textContent ?? "";
+  expect(segment).toContain("화자 1");
+  expect(segment).toContain("추정: 김민수");
+  await act(async () => button("원본 전사").click()); await settle();
+  expect(element.textContent).not.toContain("추정: 김민수");
 });

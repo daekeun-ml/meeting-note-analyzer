@@ -3,7 +3,7 @@ import { STAGES, s3Keys, transcriptSchema, type StageOutputs, type Transcript } 
 
 const backend = vi.hoisted(() => ({ getMeeting: vi.fn(), readJson: vi.fn(), putFinalDocument: vi.fn(), notifyUser: vi.fn(), s3: { send: vi.fn() }, env: { dataBucket: "test-bucket" } }));
 const updateMeeting = vi.hoisted(() => vi.fn());
-vi.mock("@meeting-notes/backend", async (original) => ({ ...await original<typeof import("@meeting-notes/backend")>(), ...backend }));
+vi.mock("@meeting-notes/backend", async (original) => ({ ...await original<typeof import("@meeting-notes/backend")>(), withDocumentLock: async (_id: string, operation: () => Promise<unknown>) => operation(), ...backend }));
 vi.mock("../src/lib/meeting-updates.js", () => ({ updateMeeting }));
 vi.mock("../src/lib/env.js", () => ({ pipelineEnv: { memoryId: "", webOrigin: "https://example.test" } }));
 import { handler } from "../src/handlers/finalize.js";
@@ -60,4 +60,10 @@ it("does not mark completion if publishing the corrected KB transcript fails", a
   backend.s3.send.mockRejectedValue(new Error("unavailable"));
   await expect(handler(input)).rejects.toThrow("unavailable");
   expect(updateMeeting).not.toHaveBeenCalled();
+});
+it("publishes the document and KB transcript under the title the record carries at completion", async () => {
+  backend.getMeeting.mockResolvedValue({ owner: "u1", title: "바뀐 제목" }); // renamed while the pipeline was running
+  await handler(input);
+  expect(backend.putFinalDocument.mock.calls[0]![1]).toMatchObject({ title: "바뀐 제목" });
+  expect(backend.s3.send.mock.calls[0]![0].input.Body).toContain("# 바뀐 제목");
 });

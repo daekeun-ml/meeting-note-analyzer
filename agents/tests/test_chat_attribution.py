@@ -80,3 +80,28 @@ async def test_transcript_tool_does_not_replay_proposals_when_corrected_file_is_
     result = await tools.build_server(tools.TurnContext(sub="u1"))["get_transcript_window"]({"meetingId": "m1", "startSec": 0, "endSec": 20})
     assert json.loads(result["content"][0]["text"])["lines"] == ["[00:00] S1: 발언"]
     assert [call.args[0] for call in read.call_args_list] == ["results/m1/transcript_attributed.json", "original"]
+
+
+async def test_name_only_review_reaches_transcript_tools_without_flagging_every_utterance(monkeypatch):
+    from meeting_agents.attribution import reconcile_attribution
+    from meeting_agents.transcript import Transcript
+    source = {"meetingId": "m1", "durationSec": 10, "segments": [{"id": "seg-1", "start": 0, "end": 5, "speaker": "S1", "text": "제가 검토할게요.", "words": []}]}
+    safe, data = reconcile_attribution(source, {"speakers": [{"id": "S1", "label": "이름 후보", "confidence": 0.5}]})
+    assert not data["segments"][0]["speakerReviewRequired"]
+    markdown = Transcript(data).to_markdown("회의")
+    assert markdown.count("[speaker name review required]") == 1
+    assert "[speaker review required]" not in markdown
+    monkeypatch.setattr(tools, "tool", lambda *args: lambda handler: handler)
+    monkeypatch.setattr(tools, "create_sdk_mcp_server", lambda **kwargs: {t.__name__: t for t in kwargs["tools"]})
+    monkeypatch.setattr(tools, "_owned_meeting", lambda *args: {**RECORD, "notesKey": "document"})
+    monkeypatch.setattr(tools, "_meeting_transcript", lambda rec: data)
+    doc = {"speakers": safe["speakers"]}
+    monkeypatch.setattr(tools, "_read_json", lambda key: doc)
+    ctx = tools.TurnContext(sub="u1")
+    result = await tools.build_server(ctx)["get_transcript_window"]({"meetingId": "m1", "startSec": 0, "endSec": 8})
+    payload = json.loads(result["content"][0]["text"])
+    assert payload["speakers"] == [{"id": "S1", "label": "S1", "reviewRequired": True, "proposedLabel": "이름 후보"}]
+    assert "이름 검토 필요" in ctx.evidence[0]["snippet"]
+    assert "speaker review required" not in payload["lines"][0]
+    doc["speakers"] = [{"id": "S1", "label": "확인한 이름", "nameConfirmedByUser": True, "reviewRequired": False}]
+    assert tools._window_speakers(data, data["segments"], doc) == [{"id": "S1", "label": "확인한 이름", "reviewRequired": False}]

@@ -12,18 +12,48 @@ interface Props {
   transcriptRevision?: string;
   audioUrl: string | null;
   speakerLabels: Record<string, string>;
+  /** Unconfirmed name proposals (id -> label): shown as a hint next to the acoustic label, never as the identity. */
+  proposedLabels?: Record<string, string>;
   confirmedSpeakerNames?: string[];
   onRefreshUrls?: () => Promise<MeetingResultResponse | undefined>;
 }
 
-export function Transcript({ transcriptUrl, originalTranscriptUrl, transcriptRevision, audioUrl, speakerLabels, confirmedSpeakerNames = [], onRefreshUrls }: Props) {
+export function Transcript({ transcriptUrl, originalTranscriptUrl, transcriptRevision, audioUrl, speakerLabels, proposedLabels = {}, confirmedSpeakerNames = [], onRefreshUrls }: Props) {
   const [showOriginal, setShowOriginal] = useState(false);
   const [reviewOnly, setReviewOnly] = useState(false);
   const original = showOriginal && !!originalTranscriptUrl;
   const selectedUrl = original ? originalTranscriptUrl! : transcriptUrl;
-  const [stableAudio, refreshAudio] = useStableUrl(audioUrl);
+  const [audioOverride, setAudioOverride] = useState<{ path: string | null; url: string } | null>(null);
+  const [stableAudio, refreshAudio] = useStableUrl(audioOverride && audioOverride.path === urlPath(audioUrl) ? audioOverride.url : audioUrl);
+  const audioRecoveryUsed = useRef(false);
+  const recoveringAudio = useRef(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const [audioLoading, setAudioLoading] = useState(false);
   const [current, setCurrent] = useState(0);
   const player = useRef<AudioPlayerHandle>(null);
+
+  const recoverAudio = async (manual = false) => {
+    if (recoveringAudio.current) return;
+    if (audioRecoveryUsed.current && !manual) {
+      setAudioError("오디오 연결을 복구하지 못했습니다. 다시 시도해 주세요.");
+      return;
+    }
+    audioRecoveryUsed.current = true;
+    recoveringAudio.current = true;
+    player.current?.preservePosition?.();
+    setAudioLoading(true); setAudioError(null);
+    try {
+      const result = await onRefreshUrls?.();
+      if (!result?.audioUrl || result.audioUrl === stableAudio) throw new Error("오디오 연결을 새로 받지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      setAudioOverride({ path: urlPath(audioUrl), url: result.audioUrl });
+      refreshAudio();
+    } catch (error) {
+      setAudioError(error instanceof Error ? error.message : "오디오 연결에 실패했습니다.");
+    } finally {
+      recoveringAudio.current = false;
+      setAudioLoading(false);
+    }
+  };
 
   // Signatures rotate while polling; object revisions change only when content does.
   // Use the latest signed URL when a fetch is actually necessary.
@@ -46,6 +76,7 @@ export function Transcript({ transcriptUrl, originalTranscriptUrl, transcriptRev
   const data = q.data;
   const speakerIds = useMemo(() => Array.from(new Set((data?.segments ?? []).map((s) => s.speaker))), [data]);
   const label = (id: string) => original ? id : speakerLabels[id] ?? data?.speakers.find((s) => s.id === id)?.label ?? id;
+  const hint = (id: string) => (original ? undefined : proposedLabels[id]);
   const corrections = (original ? [] : data?.speakerAttribution?.corrections ?? []).filter((c) =>
     !(c.kind === "label" && confirmedSpeakerNames.includes(c.to)));
   const reviewItems = corrections.filter((c) => c.status === "review_required");
@@ -63,7 +94,9 @@ export function Transcript({ transcriptUrl, originalTranscriptUrl, transcriptRev
     <div>
       {stableAudio && (
         <div className="sticky top-0 z-10 -mx-4 px-4 pt-1 pb-2 bg-bg/95 backdrop-blur">
-          <AudioPlayer ref={player} src={stableAudio} onTime={setCurrent} onError={refreshAudio} />
+          <AudioPlayer ref={player} src={stableAudio} onTime={setCurrent} onError={() => { void recoverAudio(); }} />
+          {audioLoading && <p className="mt-2 text-xs text-ink-3" role="status">오디오 연결을 다시 확인하고 있습니다.</p>}
+          {audioError && <InlineError>{audioError}<button className="tap underline ml-2" onClick={() => { void recoverAudio(true); }}>오디오 다시 연결</button></InlineError>}
         </div>
       )}
       {originalTranscriptUrl && (
@@ -81,7 +114,7 @@ export function Transcript({ transcriptUrl, originalTranscriptUrl, transcriptRev
           <div className="rounded-xl border border-line bg-surface p-3 mb-3 text-sm" aria-label="화자 보정 상태">
             <p className="font-semibold">화자 보정 {corrections.filter((c) => c.status === "applied").length}건 적용{reviewItems.length > 0 ? `, 검토 필요 ${reviewItems.length}건` : ""}</p>
             <p className="mt-1 text-xs text-ink-3">검토가 필요한 제안은 적용하지 않았습니다. 근거와 해당 음성을 확인해 주세요.</p>
-            {reviewItems.length > 0 && <label className="inline-flex items-center gap-2 mt-3 text-xs cursor-pointer"><input type="checkbox" checked={reviewOnly} onChange={(e) => setReviewOnly(e.target.checked)} />검토 필요한 발언만 보기</label>}
+            {reviewItems.some((c) => c.segmentIds.length > 0) && <label className="inline-flex items-center gap-2 mt-3 text-xs cursor-pointer"><input type="checkbox" checked={reviewOnly} onChange={(e) => setReviewOnly(e.target.checked)} />검토 필요한 발언만 보기</label>}
             {reviewItems.filter((c) => c.segmentIds.length === 0).map((c) => <CorrectionDetails key={c.id} corrections={[c]} onSeek={seek} hasAudio={!!stableAudio} />)}
           </div>
         )}
@@ -90,6 +123,7 @@ export function Transcript({ transcriptUrl, originalTranscriptUrl, transcriptRev
             <span key={id} className="inline-flex items-center gap-1.5 rounded-full bg-surface border border-line pl-1 pr-2.5 py-1 text-xs">
               <Avatar name={label(id)} index={i} size={20} />
               <span className={`font-semibold ${speakerColorClass(i)}`}>{label(id)}</span>
+              {hint(id) && <span className="text-[11px] text-ink-3">추정: {hint(id)}</span>}
             </span>
           ))}
         </div>
@@ -108,12 +142,13 @@ export function Transcript({ transcriptUrl, originalTranscriptUrl, transcriptRev
                     <div className="flex flex-wrap items-center gap-2 mb-1">
                       <Avatar name={label(seg.speaker)} index={si} size={22} />
                       <span className={`text-[12px] font-semibold ${speakerColorClass(si)}`}>{label(seg.speaker)}</span>
+                      {hint(seg.speaker) && <span className="text-[11px] text-ink-3">추정: {hint(seg.speaker)}</span>}
                       {needsReview ? <span className="text-[11px] rounded border border-line px-1.5 py-0.5 text-ink">검토 필요</span> : changes.length > 0 && <span className="text-[11px] text-accent">보정됨</span>}
                     </div>
                   )}
                   <div className="flex gap-3">
                     <span className={`shrink-0 w-11 text-[11px] tabular-nums pt-0.5 ${active ? "text-accent" : "text-ink-3"}`}>{hms(seg.start)}</span>
-                    <p className={`text-[14.5px] leading-relaxed ${active ? "text-ink" : "text-ink-2"}`}>{seg.text}</p>
+                    <p className={`min-w-0 text-[14.5px] leading-relaxed [overflow-wrap:anywhere] ${active ? "text-ink" : "text-ink-2"}`}>{seg.text}</p>
                   </div>
                 </button>
                 {changes.length > 0 && <div className="px-3 pb-2"><CorrectionDetails corrections={changes} onSeek={seek} hasAudio={!!stableAudio} /></div>}

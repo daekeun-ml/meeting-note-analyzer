@@ -2,6 +2,7 @@ import type { ChatMessageDto, ChatSessionDto, CompleteUploadRequest, CreateMeeti
 import { useAuth } from "react-oidc-context";
 import { useMemo } from "react";
 import { useConfig } from "./use-config";
+import { renewSession } from "./auth-renew";
 import type { CompleteLectureUpload, CreateLectureRequest, CreateLectureResponse, LectureDocument, LectureDto, LectureResultLinks, LectureResultResponse } from "@meeting-notes/shared";
 
 export class ApiError extends Error {
@@ -10,14 +11,20 @@ export class ApiError extends Error {
   }
 }
 
-export function createApi(base: string, getToken: () => string | undefined) {
-  async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const token = getToken();
-    const res = await fetch(`${base}${path}`, {
+export function createApi(base: string, getToken: () => string | undefined, renew?: () => Promise<string | undefined>) {
+  const send = (method: string, path: string, body: unknown, token: string | undefined) =>
+    fetch(`${base}${path}`, {
       method,
       headers: { ...(body ? { "content-type": "application/json" } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) },
       body: body ? JSON.stringify(body) : undefined,
     });
+  async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+    let res = await send(method, path, body, getToken());
+    if (res.status === 401 && renew) {
+      // The ID token can expire while the app sits in the background; renew once with the refresh token and retry.
+      const fresh = await renew().catch(() => undefined);
+      if (fresh) res = await send(method, path, body, fresh);
+    }
     if (res.status === 204) return undefined as T;
     const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
     if (!res.ok) throw new ApiError(res.status, data.error ?? "error", data.message ?? `HTTP ${res.status}`);
@@ -49,6 +56,7 @@ export function createApi(base: string, getToken: () => string | undefined) {
     deleteMeeting: (id: string) => call<void>("DELETE", `/meetings/${encodeURIComponent(id)}`),
     retryMeeting: (id: string) => call<{ executionArn: string }>("POST", `/meetings/${encodeURIComponent(id)}/retry`),
     createMeetingBrief: (id: string) => call<{ executionArn: string }>("POST", `/meetings/${encodeURIComponent(id)}/brief`),
+    updateMeeting: (id: string, body: { title: string }) => call<{ meeting: MeetingDto }>("PATCH", `/meetings/${encodeURIComponent(id)}`, body),
     renameSpeakers: (id: string, labels: Record<string, string>) => call<{ speakers: NotesDocument["speakers"] }>("PATCH", `/meetings/${encodeURIComponent(id)}/speakers`, { labels }),
     subscribePush: (sub: { endpoint: string; keys: { p256dh: string; auth: string }; userAgent?: string }) => call<void>("PUT", "/push/subscription", sub),
     unsubscribePush: (endpoint: string) => call<void>("DELETE", "/push/subscription", { endpoint }),
@@ -66,5 +74,6 @@ export function useApi(): Api {
   const auth = useAuth();
   const cfg = useConfig();
   const token = auth.user?.id_token;
-  return useMemo(() => createApi(cfg.apiBase, () => token), [cfg.apiBase, token]);
+  const { signinSilent } = auth;
+  return useMemo(() => createApi(cfg.apiBase, () => token, async () => (await renewSession(signinSilent))?.id_token), [cfg.apiBase, token, signinSilent]);
 }

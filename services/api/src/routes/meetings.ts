@@ -10,11 +10,12 @@ import {
   toMeetingDto,
   type CompleteUploadRequest,
   type CreateMeetingResponse,
+  type MeetingDto,
   type MeetingRecord,
   type MeetingResultResponse,
   type NotesDocument,
 } from "@meeting-notes/shared";
-import { claimRetry, countActiveMeetings, deleteMeeting, getMeeting, listMeetingsByOwner, markBriefRun, putMeeting, releaseRetry } from "@meeting-notes/backend";
+import { claimRetry, countActiveMeetings, deleteMeeting, DocumentBusyError, getMeeting, listMeetingsByOwner, markBriefRun, putMeeting, releaseRetry, setMeetingTitle, withDocumentLock } from "@meeting-notes/backend";
 import { HttpError, type Caller } from "../lib/http.js";
 import { abortMultipartUpload, applySpeakerLabels, completeMultipartUpload, createMultipartUpload, deleteMeetingMemory, deletePrefix, headObject, presignDownload, presignUpload, putFinalDocument, readJson } from "@meeting-notes/backend";
 import { apiEnv } from "../lib/env.js";
@@ -99,10 +100,20 @@ export async function listMeetings(caller: Caller, cursor?: string) {
   return { items: page.items.map(toMeetingDto), cursor: page.cursor ?? null };
 }
 
-export async function requireOwnedMeeting(caller: Caller, meetingId: string): Promise<MeetingRecord> {
-  const rec = await getMeeting(meetingId);
+export async function requireOwnedMeeting(caller: Caller, meetingId: string, consistentRead = false): Promise<MeetingRecord> {
+  const rec = await getMeeting(meetingId, consistentRead);
   if (!rec || rec.owner !== caller.sub) throw new HttpError(404, "meeting not found", "not_found");
   return rec;
+}
+
+async function editDocument<T>(caller: Caller, meetingId: string, operation: (meeting: MeetingRecord) => Promise<T>): Promise<T> {
+  await requireOwnedMeeting(caller, meetingId); // Reject foreign requests before they can acquire a lock.
+  try {
+    return await withDocumentLock(meetingId, async () => operation(await requireOwnedMeeting(caller, meetingId, true)));
+  } catch (error) {
+    if (error instanceof DocumentBusyError) throw new HttpError(409, error.message, "document_busy");
+    throw error;
+  }
 }
 
 export async function getMeetingResult(caller: Caller, meetingId: string): Promise<MeetingResultResponse> {
@@ -124,25 +135,26 @@ export async function getMeetingResult(caller: Caller, meetingId: string): Promi
 }
 
 export async function removeMeeting(caller: Caller, meetingId: string): Promise<void> {
-  const rec = await requireOwnedMeeting(caller, meetingId);
-  const running = [rec.executionArn && ACTIVE_STATUSES.includes(rec.status) ? rec.executionArn : null, rec.briefStatus === "RUNNING" ? rec.briefExecutionArn : null];
-  for (const executionArn of running) {
-    if (!executionArn || !apiEnv.stateMachineArn) continue;
-    try {
-      await sfn.send(new StopExecutionCommand({ executionArn, cause: "deleted by user" }));
-    } catch (err) {
-      if ((err as { name?: string }).name !== "ExecutionDoesNotExist") throw err;
+  return editDocument(caller, meetingId, async (rec) => {
+    const running = [rec.executionArn && ACTIVE_STATUSES.includes(rec.status) ? rec.executionArn : null, rec.briefStatus === "RUNNING" ? rec.briefExecutionArn : null];
+    for (const executionArn of running) {
+      if (!executionArn || !apiEnv.stateMachineArn) continue;
+      try {
+        await sfn.send(new StopExecutionCommand({ executionArn, cause: "deleted by user" }));
+      } catch (err) {
+        if ((err as { name?: string }).name !== "ExecutionDoesNotExist") throw err;
+      }
     }
-  }
-  if (rec.uploadId && rec.status === "UPLOAD_PENDING") await abortMultipartUpload(rec.audioKey, rec.uploadId).catch(() => undefined);
-  // Memory first: if this fails the meeting stays visible and the user can delete again.
-  if (apiEnv.memoryId) await deleteMeetingMemory(apiEnv.memoryId, rec.owner, meetingId, rec.title);
-  await Promise.all([
-    deletePrefix(s3Keys.meetingPrefix(caller.sub, meetingId)),
-    deletePrefix(`transcripts/${meetingId}/`),
-    deletePrefix(`results/${meetingId}/`),
-  ]);
-  await deleteMeeting(meetingId);
+    if (rec.uploadId && rec.status === "UPLOAD_PENDING") await abortMultipartUpload(rec.audioKey, rec.uploadId).catch(() => undefined);
+    // Memory first: if this fails the meeting stays visible and the user can delete again.
+    if (apiEnv.memoryId) await deleteMeetingMemory(apiEnv.memoryId, rec.owner, meetingId, rec.title);
+    await Promise.all([
+      deletePrefix(s3Keys.meetingPrefix(caller.sub, meetingId)),
+      deletePrefix(`transcripts/${meetingId}/`),
+      deletePrefix(`results/${meetingId}/`),
+    ]);
+    await deleteMeeting(meetingId);
+  });
 }
 
 /** Restart the pipeline for a FAILED meeting; the state machine skips steps whose outputs already exist. */
@@ -198,15 +210,36 @@ export function endpointHash(endpoint: string): string {
   return createHash("sha256").update(endpoint).digest("hex").slice(0, 32);
 }
 
+export const updateMeetingSchema = z.object({ title: z.string().trim().min(1).max(200) });
+
+/**
+ * Rename a meeting. A published document (even one from an earlier run of a meeting being re-analysed) is rewritten
+ * first so document.json/.md and the KB sidecars follow the record, then the record itself. All writers share
+ * the same lock and read the current state after acquiring it, including Finalize and speaker edits.
+ */
+export async function updateMeetingTitle(caller: Caller, meetingId: string, body: z.infer<typeof updateMeetingSchema>): Promise<{ meeting: MeetingDto }> {
+  return editDocument(caller, meetingId, async (rec) => {
+    if (rec.notesKey) {
+      const doc = await readJson<NotesDocument>(rec.notesKey);
+      if (!doc || doc.meetingId !== meetingId) throw new HttpError(409, "회의록을 읽지 못했습니다. 잠시 후 다시 시도해 주세요.", "document_unavailable");
+      // Re-publish derivatives even on an idempotent retry after a partial S3 failure.
+      await putFinalDocument(rec.owner, { ...doc, title: body.title }, rec.notesKey);
+    }
+    await setMeetingTitle(meetingId, body.title);
+    return { meeting: toMeetingDto({ ...rec, title: body.title }) };
+  });
+}
+
 export const updateSpeakersSchema = z.object({ labels: z.record(z.string().regex(/^S\d{1,3}$/), z.string().trim().min(1).max(40)).refine((o) => Object.keys(o).length > 0 && Object.keys(o).length <= 20, "1 to 20 speakers") });
 
 /** Rename speakers of a finished meeting; rewrites document.json/.md and the KB sidecars (which re-trigger ingestion). */
 export async function renameSpeakers(caller: Caller, meetingId: string, body: z.infer<typeof updateSpeakersSchema>): Promise<{ speakers: NotesDocument["speakers"] }> {
-  const rec = await requireOwnedMeeting(caller, meetingId);
-  if (rec.status !== "COMPLETED" || !rec.notesKey) throw new HttpError(409, "분석이 끝난 회의만 화자 이름을 바꿀 수 있습니다", "not_completed");
-  const doc = await readJson<NotesDocument>(rec.notesKey);
-  if (!doc) throw new HttpError(404, "document not found", "not_found");
-  const { doc: updated, changed } = applySpeakerLabels(doc, body.labels);
-  if (changed) await putFinalDocument(rec.owner, updated);
-  return { speakers: updated.speakers };
+  return editDocument(caller, meetingId, async (rec) => {
+    if (rec.status !== "COMPLETED" || !rec.notesKey) throw new HttpError(409, "분석이 끝난 회의만 화자 이름을 바꿀 수 있습니다", "not_completed");
+    const doc = await readJson<NotesDocument>(rec.notesKey);
+    if (!doc || doc.meetingId !== meetingId) throw new HttpError(404, "document not found", "not_found");
+    const { doc: updated } = applySpeakerLabels(doc, body.labels);
+    await putFinalDocument(rec.owner, updated, rec.notesKey);
+    return { speakers: updated.speakers };
+  });
 }

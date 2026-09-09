@@ -8,13 +8,17 @@ The app uses the CloudFront URL created during deployment, with HTTPS provided b
 
 - **Meeting notes:** upload an MP3 to get a transcript, speaker labels, agenda, detailed notes, follow-up tasks, suggestions, and a mind map.
 - **Speaker review:** contextual corrections are checked against transcript evidence. Uncertain changes keep the original speaker and are marked for review. Compare the original and corrected transcripts or play the supporting speech. See [speaker review](docs/speaker-review.md).
+- **Meeting editing:** change a meeting title while analysis is running or after it finishes. Title and participant-name edits are coordinated with final document publication so concurrent saves preserve new results.
 - **Short meeting brief:** a separate recap of the outcome, decisions and their reasoning, action items, and unresolved questions. Decision explanations include transcript evidence when available.
 - **Lecture study:** upload an MP4, optionally with a PPTX or PDF. The pipeline matches screen content with spoken explanations and generates notes, questions, flashcards, and reference links.
+- **Lecture playback:** a playing lecture docks into a small player when its original position scrolls out of view. Long meeting and lecture titles wrap within the page.
 - **Paper search:** lecture references are retrieved through the AgentCore Web Search MCP connector and Gateway.
 - **Chat:** ask questions about your meeting and lecture material with source references.
 - **Background processing:** once the upload finishes and processing starts, analysis continues on the server after the browser closes. Keep the upload page open until then. Web Push notifications are optional.
 
 The interface is in Korean. Meeting and lecture outputs can be requested in Korean, English, or the source language.
+
+Expired sessions are renewed in the background when a refresh token is available. Drafts and playback remain in place during renewal, and expired audio links can be reconnected without losing the playback position. Recordings with no recognized speech stop before the analysis stages and show a clear error.
 
 ## Supported files
 

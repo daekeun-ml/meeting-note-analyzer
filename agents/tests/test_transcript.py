@@ -46,7 +46,8 @@ def test_old_attribution_without_evidence_is_reviewed_not_applied():
     out = apply_attribution(t, attribution)
     assert [s["speaker"] for s in out["segments"]] == [s["speaker"] for s in t["segments"]]
     assert out["segments"][0]["speakerLabel"] == "S1"
-    assert all(s["speakerReviewRequired"] for s in out["segments"])
+    # The unverified merge flags S2's utterances and the relabel flags seg-0000; the name proposal alone flags nothing.
+    assert [s["speakerReviewRequired"] for s in out["segments"]] == [i % 2 == 1 or i == 0 for i in range(12)]
     assert out["attributed"] is True
     assert json.dumps(out)  # serializable
 

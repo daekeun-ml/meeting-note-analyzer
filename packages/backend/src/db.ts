@@ -20,8 +20,8 @@ export const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
   marshallOptions: { removeUndefinedValues: true },
 });
 
-export async function getMeeting(meetingId: string): Promise<MeetingRecord | undefined> {
-  const res = await ddb.send(new GetCommand({ TableName: env.tableName, Key: meetingKeys.meeting(meetingId) }));
+export async function getMeeting(meetingId: string, consistentRead = false): Promise<MeetingRecord | undefined> {
+  const res = await ddb.send(new GetCommand({ TableName: env.tableName, Key: meetingKeys.meeting(meetingId), ConsistentRead: consistentRead }));
   return res.Item as MeetingRecord | undefined;
 }
 
@@ -134,6 +134,15 @@ export async function claimRetry(meetingId: string, token: string, expectedStatu
 
 export async function releaseRetry(meetingId: string, token?: string): Promise<void> {
   await ddb.send(new UpdateCommand({ TableName: env.tableName, Key: meetingKeys.meeting(meetingId), UpdateExpression: "REMOVE #rt", ExpressionAttributeNames: { "#rt": "retryToken" }, ...(token ? { ConditionExpression: "#rt = :token", ExpressionAttributeValues: { ":token": token } } : {}) }));
+}
+
+/** Rename a meeting; the item must already exist so a typo in the id cannot create a stray record. */
+export async function setMeetingTitle(meetingId: string, title: string): Promise<void> {
+  await ddb.send(new UpdateCommand({
+    TableName: env.tableName, Key: meetingKeys.meeting(meetingId),
+    UpdateExpression: "SET #title = :title, #u = :now", ConditionExpression: "attribute_exists(PK)",
+    ExpressionAttributeNames: { "#title": "title", "#u": "updatedAt" }, ExpressionAttributeValues: { ":title": title, ":now": new Date().toISOString() },
+  }));
 }
 
 /** The brief request is accepted: record the running job on the still-COMPLETED meeting so the UI can follow it. */

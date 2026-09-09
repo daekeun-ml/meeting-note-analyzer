@@ -173,6 +173,9 @@ export class PipelineStack extends Stack {
       outputs: "{% $states.result.Payload %}",
     });
 
+    // A busy document lock means this attempt has not written anything. Retry without rerunning analysis.
+    finalize.addRetry({ errors: ["DocumentBusyError"], interval: Duration.seconds(3), backoffRate: 2, maxAttempts: 15, maxDelay: Duration.seconds(60) });
+
     const markFailed = tasks.LambdaInvoke.jsonata(this, "MarkFailed", {
       lambdaFunction: markFailedFn,
       payload: sfn.TaskInput.fromObject({ ...meetingFields, errorOutput: "{% $states.input.errorOutput %}" }),

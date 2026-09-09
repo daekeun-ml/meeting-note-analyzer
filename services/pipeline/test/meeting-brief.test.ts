@@ -3,7 +3,7 @@ import { STAGES, type NotesDocument } from "@meeting-notes/shared";
 
 const backend = vi.hoisted(() => ({ getMeeting: vi.fn(), readJson: vi.fn(), putFinalDocument: vi.fn(), notifyUser: vi.fn() }));
 const updateMeeting = vi.hoisted(() => vi.fn());
-vi.mock("@meeting-notes/backend", async (original) => ({ ...await original<typeof import("@meeting-notes/backend")>(), ...backend }));
+vi.mock("@meeting-notes/backend", async (original) => ({ ...await original<typeof import("@meeting-notes/backend")>(), withDocumentLock: async (_id: string, operation: () => Promise<unknown>) => operation(), ...backend }));
 vi.mock("../src/lib/meeting-updates.js", () => ({ updateMeeting, setStatus: vi.fn() }));
 vi.mock("../src/lib/env.js", () => ({ pipelineEnv: { memoryId: "", webOrigin: "https://example.test" } }));
 import { handler as register } from "../src/handlers/register-upload.js";
@@ -49,7 +49,7 @@ it("preserves current published content and renamed speakers when attaching the 
   const brief = { headline: "추가 결론", decisions: [], followUpIds: ["F1"], openQuestions: [], omittedCounts: { decisions: 0, followUps: 0, openQuestions: 0 } };
   backend.readJson.mockImplementation(async (key) => key === record.notesKey ? previous : key === "results/m1/meeting_brief.json" ? brief : null);
   await finalize({ meetingId: "m1", ownerSub: "u1", title: "회의", outputLanguage: "ko", transcriptKey: record.transcriptKey, briefOnly: true, expectBrief: true });
-  expect(backend.putFinalDocument).toHaveBeenCalledWith("u1", { ...previous, brief });
+  expect(backend.putFinalDocument).toHaveBeenCalledWith("u1", { ...previous, brief, title: record.title }, record.notesKey);
   expect(backend.readJson.mock.calls.map(([key]) => key)).toEqual([record.notesKey, "results/m1/meeting_brief.json"]);
   expect(updateMeeting).toHaveBeenCalledWith("m1", expect.objectContaining({ status: "COMPLETED", completedAt: record.completedAt }), undefined, ["briefOnly", "briefStatus", "briefError", "briefExecutionArn"]);
 });

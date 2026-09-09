@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 from claude_agent_sdk import AgentDefinition, ClaudeAgentOptions, ResultMessage, query
 
@@ -218,7 +219,8 @@ async def run_query(prompt: str, options: ClaudeAgentOptions, stage: str) -> tup
 
 def run_stage(payload: StagePayload) -> dict[str, Any]:
     spec = SPECS[payload.stage]
-    s3 = boto3.client("s3", region_name=REGION)
+    # Throttling and 5xx on the transcript lookups are retried by the SDK before they can fail a stage.
+    s3 = boto3.client("s3", region_name=REGION, config=Config(retries={"mode": "standard", "max_attempts": 5}))
     sfn = boto3.client("stepfunctions", region_name=REGION)
     ddb = boto3.resource("dynamodb", region_name=REGION).Table(TABLE_NAME) if TABLE_NAME else None
     trace_ctx = tracing.StageTrace(stage=spec.name, meeting_id=payload.meetingId, user_id=payload.ownerSub, model=spec.model, subagent_models={a.name: a.model for a in spec.subagents})
@@ -247,7 +249,9 @@ def run_stage(payload: StagePayload) -> dict[str, Any]:
             log.warning("stage %s attempt %d rejected: %s", spec.name, attempt, note)
         if validated is None:
             raise StageError(f"stage output rejected after {MAX_ATTEMPTS} attempts: {note}")
-        if spec.name not in ("meeting_brief", "speaker_attribution"):  # These contain verbatim transcript evidence.
+        if spec.name == "speaker_attribution":  # Names and reasons are cleaned; support quotes stay verbatim for verification.
+            validated = sanitize.clean_attribution(validated)
+        elif spec.name != "meeting_brief":  # The resolved recap includes verbatim transcript quotes.
             validated = sanitize.clean_output(validated)
         if spec.name == "mindmap":
             validated = verify_mindmap(validated, workdir, lambda note: asyncio.run(run_query(build_task_prompt(payload, spec, workdir, transcript, note), options, spec.name)))
