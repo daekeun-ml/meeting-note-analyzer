@@ -70,7 +70,7 @@ Start with `us-east-1`. Check regional availability for AgentCore Web Search, ma
 
 Deployment creates billable AWS resources, including GPU transcription capacity and model calls. Read the [deployment prerequisites](docs/deployment.md#before-you-start) before starting.
 
-Review the [open STT dependency advisory](SECURITY.md#known-dependency-advisory) before deployment. Passing tests and secret scans does not resolve that dependency issue.
+Review the [open dependency advisories](SECURITY.md#known-dependency-advisories) before deployment. Passing tests and secret scans does not resolve those dependency issues.
 
 AWS CLI credentials are used for deployment and administration. They are separate from the Cognito accounts used to sign in to the app.
 
