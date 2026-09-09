@@ -21,6 +21,14 @@ describe("applySpeakerLabels", () => {
   it("is a no-op for unchanged names", () => {
     expect(applySpeakerLabels(doc, { S1: " 발표자 " }).changed).toBe(0);
   });
+  it("records manual name confirmation and clears only the identity proposal", () => {
+    const uncertain = { ...doc, speakers: [{ ...doc.speakers[0]!, label: "S1", reviewRequired: true, proposedLabel: "이름 후보", reviewReason: "context_only" }] };
+    const { doc: out, changed } = applySpeakerLabels(uncertain, { S1: "확인한 이름" });
+    expect(changed).toBe(1);
+    expect(out.speakers[0]).toMatchObject({ label: "확인한 이름", reviewRequired: false, nameConfirmedByUser: true });
+    expect(out.speakers[0]).not.toHaveProperty("proposedLabel");
+    expect(uncertain.speakers[0]!.reviewRequired).toBe(true);
+  });
   it("kbMetadata carries the owner and current speaker labels", () => {
     const meta = JSON.parse(kbMetadata("sub-1", applySpeakerLabels(doc, { S2: "박지훈" }).doc)) as { metadataAttributes: Record<string, unknown> };
     expect(meta.metadataAttributes.owner).toBe("sub-1");

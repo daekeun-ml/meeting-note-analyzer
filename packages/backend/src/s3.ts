@@ -4,6 +4,7 @@ import {
   CreateMultipartUploadCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -67,6 +68,18 @@ export async function abortMultipartUpload(key: string, uploadId: string): Promi
 
 export async function presignDownload(key: string, expiresIn = 3600): Promise<string> {
   return getSignedUrl(s3, new GetObjectCommand({ Bucket: env.dataBucket, Key: key }), { expiresIn });
+}
+
+/** Missing objects are a supported fallback. Permission and service failures must surface. */
+export async function headObject(key: string): Promise<{ revision: string } | null> {
+  try {
+    const res = await s3.send(new HeadObjectCommand({ Bucket: env.dataBucket, Key: key }));
+    return { revision: (res.VersionId && res.VersionId !== "null" ? res.VersionId : undefined) ?? res.ETag ?? res.LastModified?.toISOString() ?? "unknown" };
+  } catch (err) {
+    const error = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+    if (error.name === "NotFound" || error.name === "NoSuchKey" || error.$metadata?.httpStatusCode === 404) return null;
+    throw err;
+  }
 }
 
 export async function readJson<T = unknown>(key: string): Promise<T | null> {

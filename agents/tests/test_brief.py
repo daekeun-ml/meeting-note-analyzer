@@ -91,7 +91,9 @@ def test_backfill_workdir_uses_current_document_without_old_stage_files(monkeypa
 
     class FakeS3:
         def head_object(self, **kwargs):
-            raise FileNotFoundError("no separate attributed transcript")
+            from botocore.exceptions import ClientError
+
+            raise ClientError({"Error": {"Code": "404"}}, "HeadObject")
 
         def download_file(self, bucket, key, destination):
             downloads.append(key)
@@ -104,3 +106,13 @@ def test_backfill_workdir_uses_current_document_without_old_stage_files(monkeypa
     text = (workdir / "prior" / "follow_ups.json").read_text(encoding="utf-8")
     assert "\n" in text and "수정된 이름" in text
     assert transcript.segments == SEGMENTS
+
+
+def test_follow_up_owner_name_is_a_short_display_name():
+    from pydantic import ValidationError
+    from meeting_agents.schemas import validate
+
+    item = {"id": "F1", "title": "결제 타임아웃 대응", "priority": "high", "ownerName": "지훈"}
+    assert validate("follow_ups", {"items": [item]})["items"][0]["ownerName"] == "지훈"
+    with pytest.raises(ValidationError):
+        validate("follow_ups", {"items": [{**item, "ownerName": "지훈님(디자인 파트로 지칭됨, 화자 id 미배정, 귀속 확인되지 않음)"}]})

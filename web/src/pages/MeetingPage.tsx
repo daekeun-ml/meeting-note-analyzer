@@ -59,6 +59,11 @@ export function MeetingPage() {
     mutationFn: (labels: Record<string, string>) => api.renameSpeakers(id, labels),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["meeting", id] }),
   });
+  const renameMeeting = useMutation({
+    mutationFn: (title: string) => api.updateMeeting(id, { title }),
+    // Refetch before the editor closes so the heading and the list never show the old title.
+    onSuccess: async () => { await Promise.all([qc.invalidateQueries({ queryKey: ["meeting", id] }), qc.invalidateQueries({ queryKey: ["meetings"] })]); },
+  });
   const del = useMutation({
     mutationFn: () => api.deleteMeeting(id),
     onSuccess: async () => {
@@ -75,7 +80,7 @@ export function MeetingPage() {
 
   if (q.isLoading) return <div className="px-4 pt-2">{back}<Skeleton className="h-8 w-3/4 mt-3" /><Skeleton className="h-4 w-1/2 mt-3" /><Skeleton className="h-40 mt-5" /></div>;
   if (q.error || !q.data) return <div className="px-4 pt-2">{back}<InlineError>{String((q.error as Error)?.message ?? "오류")}</InlineError></div>;
-  const { meeting, notes, transcriptUrl, audioUrl, notesMarkdownUrl } = q.data;
+  const { meeting, notes, transcriptUrl, originalTranscriptUrl, transcriptRevision, audioUrl, notesMarkdownUrl } = q.data;
   const doc = notes as NotesDocument | null;
   const speakerLabels = Object.fromEntries((doc?.speakers ?? []).map((s) => [s.id, s.label]));
   const processing = meeting.status !== "COMPLETED";
@@ -85,8 +90,8 @@ export function MeetingPage() {
     <div className="px-4 pt-2">
       {back}
       <div className="mt-2 flex items-start justify-between gap-3">
-        <h1 className="text-[22px] font-bold leading-tight tracking-tight">{meeting.title}</h1>
-        <div className="pt-1"><StatusChip status={meeting.status} /></div>
+        <MeetingTitle title={meeting.title} onSave={(title) => renameMeeting.mutateAsync(title)} />
+        <div className="shrink-0 pt-1"><StatusChip status={meeting.status} /></div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-3">
         <span>{formatDate(meeting.createdAt)}</span>
@@ -134,7 +139,7 @@ export function MeetingPage() {
         {tab === "followups" && doc && <FollowUpsTab doc={doc} />}
         {tab === "suggestions" && doc && <SuggestionsTab doc={doc} />}
         {tab === "mindmap" && doc?.mindmap && <MindMapView map={doc.mindmap} />}
-        {tab === "transcript" && transcriptUrl && <Transcript transcriptUrl={transcriptUrl} audioUrl={audioUrl} speakerLabels={speakerLabels} />}
+        {tab === "transcript" && transcriptUrl && <Transcript transcriptUrl={transcriptUrl} originalTranscriptUrl={originalTranscriptUrl} transcriptRevision={transcriptRevision} audioUrl={audioUrl} speakerLabels={speakerLabels} proposedLabels={Object.fromEntries((doc?.speakers ?? []).filter((s) => s.reviewRequired && s.proposedLabel).map((s) => [s.id, s.proposedLabel!]))} confirmedSpeakerNames={(doc?.speakers ?? []).filter((s) => s.nameConfirmedByUser).map((s) => s.id)} onRefreshUrls={async () => (await q.refetch({ throwOnError: true })).data} />}
         {tab !== "transcript" && !doc && transcriptUrl && <p className="text-sm text-ink-3">분석이 끝나면 여기에 결과가 표시됩니다. 전사 탭에서 전사 결과를 먼저 볼 수 있습니다.</p>}
       </section>
       {doc && (tab === "summary" || tab === "notes") && <MeetingBrief doc={doc}
@@ -175,6 +180,7 @@ function SummaryTab({ doc, onRename }: { doc: NotesDocument; onRename?: (id: str
               <div className="min-w-0 flex-1">
                 <SpeakerName label={s.label} colorClass={speakerColorClass(i) ?? ""} onSave={onRename ? (label) => onRename(s.id, label) : undefined} />
                 {s.role && <p className="text-[12px] text-ink-3">{s.role}</p>}
+                {s.reviewRequired && <p className="text-[12px] text-ink-3 mt-1">이름 검토 필요{s.proposedLabel ? `: ${s.proposedLabel}로 추정` : ""}. 전사 탭에서 근거를 확인할 수 있습니다.</p>}
               </div>
             </li>
           ))}
@@ -290,6 +296,58 @@ function SuggestionsTab({ doc }: { doc: NotesDocument }) {
 }
 
 /** Speaker display name with inline editing: tap the pencil, type the real name, Enter saves (Escape cancels). */
+/** Heading with an inline editor; renaming is allowed at any status because the record is the source of truth. */
+function MeetingTitle({ title, onSave }: { title: string; onSave: (title: string) => Promise<unknown> }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(title);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!editing) {
+    return (
+      <div className="flex min-w-0 flex-1 items-start gap-1">
+        {/* Titles come from file names and can be one long token: the heading must shrink and wrap, the chip keeps its width. */}
+        <h1 className="min-w-0 text-[22px] font-bold leading-tight tracking-tight [overflow-wrap:anywhere]">{title}</h1>
+        <button type="button" aria-label="제목 바꾸기" onClick={() => { setValue(title); setEditing(true); setError(null); }} className="tap grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-3 hover:text-ink"><IconEdit size={15} /></button>
+      </div>
+    );
+  }
+  const commit = async () => {
+    const next = value.trim();
+    if (!next || next === title) return setEditing(false);
+    setSaving(true);
+    try {
+      await onSave(next);
+      setEditing(false);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="min-w-0 flex-1">
+      <input
+        aria-label="회의 제목"
+        autoFocus
+        value={value}
+        maxLength={200}
+        disabled={saving}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.nativeEvent.isComposing) void commit();
+          if (e.key === "Escape") setEditing(false);
+        }}
+        className="h-10 w-full rounded-lg border border-accent bg-surface-2 px-3 text-[17px] font-bold outline-none"
+      />
+      <div className="mt-2 flex items-center gap-2">
+        <Button size="sm" loading={saving} onClick={() => void commit()}>저장</Button>
+        <button type="button" onClick={() => setEditing(false)} className="tap text-[12px] text-ink-3">취소</button>
+      </div>
+      {error && <p className="mt-1 text-[12px] text-danger">{error}</p>}
+    </div>
+  );
+}
+
 function SpeakerName({ label, colorClass, onSave }: { label: string; colorClass: string; onSave?: (label: string) => Promise<unknown> }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(label);

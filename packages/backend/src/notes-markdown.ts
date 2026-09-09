@@ -8,7 +8,7 @@ const L = {
 export function notesToMarkdown(doc: NotesDocument): string {
   const t = doc.outputLanguage === "en" ? L.en : L.ko;
   const out: string[] = [`# ${doc.title}`, "", `_${doc.generatedAt.slice(0, 16).replace("T", " ")}, ${Math.round(doc.durationSec / 60)} ${t.minutes}, ${doc.meetingType}_`, ""];
-  out.push(`## ${t.speakers}`, ...doc.speakers.map((s) => `- ${s.label}${s.role ? `: ${s.role}` : ""}`), "");
+  out.push(`## ${t.speakers}`, ...doc.speakers.map((s) => `- ${s.label}${s.role ? `: ${s.role}` : ""}${s.reviewRequired && !s.nameConfirmedByUser ? " [speaker name review required]" : ""}`), "");
   out.push(`## ${t.summary}`, doc.summary.overview, "");
   if (doc.summary.keyDecisions.length) out.push(`### ${t.decisions}`, ...doc.summary.keyDecisions.map((d) => `- ${d}`), "");
   if (doc.summary.keyDiscussions.length) out.push(`### ${t.discussions}`, ...doc.summary.keyDiscussions.map((d) => `- **${d.title}**: ${d.detail}`), "");

@@ -5,7 +5,7 @@ Extract every commitment, request and deadline that came out of the meeting, and
 ## What to produce
 `items` with ids `F1`, `F2`, …:
 - `title`: an actionable sentence in the output language (verb + object), specific enough to check off.
-- `ownerSpeakerId` and `ownerName` (display label) when the transcript assigns responsibility; leave empty when nobody owns it: do not guess.
+- `ownerSpeakerId` and `ownerName` (display label) when the transcript assigns responsibility; leave empty when nobody owns it: do not guess. `ownerName` is a short display name or role exactly as used in the meeting (at most 30 characters, no parentheses, no explanations). When the person is named in speech but their speaker id is uncertain or unassigned, keep the spoken name in `ownerName`, leave `ownerSpeakerId` empty and do not add caveats to the name; the transcript view carries the review markers.
 - `dueHint`: the deadline exactly as expressed ("다음 주 수요일까지", "before the demo", "EOD Friday") when stated.
 - `priority`: `high` for blocking items or near deadlines, `medium` for normal commitments, `low` for nice-to-haves.
 - `evidenceSegmentIds`: the segments where the commitment/request was made.

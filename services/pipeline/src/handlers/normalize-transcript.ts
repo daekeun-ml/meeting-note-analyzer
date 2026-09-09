@@ -21,6 +21,16 @@ export function normalize(raw: SttOutput, now = new Date()): Transcript {
   return { ...raw, segments, speakers, normalizedAt: now.toISOString() };
 }
 
+export class NoSpeechError extends Error {
+  override readonly name = "NoSpeechError";
+}
+
+/** A recording with no recognized speech must fail here, not run ten analysis stages on an empty transcript. */
+export function assertSpeech(transcript: Transcript): void {
+  if (transcript.segments.length) return;
+  throw new NoSpeechError(`녹음에서 발화를 찾지 못했습니다 (길이 ${Math.round(transcript.durationSec)}초). 녹음 상태를 확인한 뒤 다시 올려 주세요.`);
+}
+
 export const handler = async (input: NormalizeInput) => {
   if (input.skipped && input.transcriptKey) {
     await updateMeeting(input.meetingId, { status: "ANALYZING" });
@@ -32,6 +42,7 @@ export const handler = async (input: NormalizeInput) => {
   const text = (await obj.Body?.transformToString("utf8")) ?? "";
   const raw = sttOutputSchema.parse(JSON.parse(text));
   const transcript = normalize(raw);
+  assertSpeech(transcript);
   const transcriptKey = s3Keys.transcriptJson(input.meetingId);
   await Promise.all([
     s3.send(new PutObjectCommand({ Bucket: env.dataBucket, Key: transcriptKey, Body: JSON.stringify(transcript), ContentType: "application/json" })),

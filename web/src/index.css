@@ -48,7 +48,7 @@ html, body, #root { height: 100%; }
   height: var(--app-height, 100%); /* measured by syncAppHeight() in main.tsx; iOS standalone reports a stale viewport on first launch */
   overflow: hidden;
 }
-.app-shell > main { -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; }
+.app-shell > main { -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; overflow-x: hidden; } /* long tokens wrap inside; the page itself never scrolls sideways */
 /* While the iOS keyboard is up the shell is sized to the visual viewport (syncAppHeight); drop the tab bar so the
    composer, sticky at the bottom of <main>, sits directly above the keys. */
 :root[data-keyboard] .app-shell > nav { display: none; }

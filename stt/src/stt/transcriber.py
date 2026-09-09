@@ -50,7 +50,12 @@ class Transcriber:
         # repetition loop runs to the limit (observed: "No position encodings are defined for positions >= 448").
         self.max_new_tokens = int(os.environ.get("STT_MAX_NEW_TOKENS", "160"))
         self.default_language = os.environ.get("STT_DEFAULT_LANGUAGE") or None
-        log.info("transcriber configured: model=%s compute=%s max_new_tokens=%d default_language=%s", self.name, self.compute_type, self.max_new_tokens, self.default_language)
+        # Language id on a short or noisy opening can return a rare language at low confidence (observed: "fo" at
+        # p=0.41 on a one-minute phone recording, after which the model produced no words). Accept a detection only
+        # when it is confident and one of the languages the product transcribes; otherwise use the default.
+        self.language_min_prob = float(os.environ.get("STT_LANGUAGE_MIN_PROB", "0.5"))
+        self.languages = {x.strip() for x in os.environ.get("STT_LANGUAGES", "ko,en,ja,zh").split(",") if x.strip()}
+        log.info("transcriber configured: model=%s compute=%s max_new_tokens=%d default_language=%s languages=%s min_prob=%.2f", self.name, self.compute_type, self.max_new_tokens, self.default_language, sorted(self.languages), self.language_min_prob)
 
     # ---- language detection -------------------------------------------------------------------
     def detect_language(self, wav: Path) -> tuple[str | None, float | None]:
@@ -83,6 +88,9 @@ class Transcriber:
         detected_prob: float | None = None
         if not language:
             language, detected_prob = self.detect_language(wav)
+            if language and ((detected_prob or 0.0) < self.language_min_prob or language not in self.languages):
+                log.info("ignoring detected language %s (p=%.2f): below %.2f or not in %s", language, detected_prob or 0.0, self.language_min_prob, sorted(self.languages))
+                language, detected_prob = None, None
             if language:
                 log.info("detected language %s (p=%.2f)", language, detected_prob or 0.0)
             else:
@@ -93,7 +101,7 @@ class Transcriber:
         result = self._run(wav, kwargs)
         words = [
             Word(w=str(getattr(w, "word", getattr(w, "w", ""))), s=float(w.start), e=float(w.end), p=_prob(w))
-            for w in getattr(result, "words", [])
+            for w in (getattr(result, "words", None) or [])  # None when the model produced nothing: an empty transcript, not a crash
         ]
         if has_corruption(words) and os.environ.get("STT_REPAIR_PASS", "1") == "1":
             # word-timing decode splits multi-byte characters, but result.text is decoded from whole sequences
@@ -115,7 +123,7 @@ class Transcriber:
             words=words,
             language=getattr(result, "language", None) or language,
             language_probability=getattr(result, "language_probability", None) or detected_prob,
-            text=getattr(result, "text", ""),
+            text=getattr(result, "text", None) or "",
         )
 
     def _run(self, wav: Path, kwargs: dict):

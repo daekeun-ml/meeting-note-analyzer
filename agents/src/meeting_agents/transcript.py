@@ -12,6 +12,13 @@ def hms(sec: float) -> str:
     return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
 
 
+def identity_review_lines(speakers: list[dict], active_ids: set[str] | None = None) -> list[str]:
+    """Name uncertainty is recorded once per speaker, separately from utterance assignment."""
+    return [f"- {s['id']}: [speaker name review required]" + (f" candidate: {s['proposedLabel']}" if s.get("proposedLabel") else "")
+            for s in speakers if s.get("reviewRequired") and not s.get("nameConfirmedByUser")
+            and (active_ids is None or s["id"] in active_ids)]
+
+
 @dataclass
 class Transcript:
     data: dict[str, Any]
@@ -29,14 +36,18 @@ class Transcript:
         return float(self.data.get("durationSec", 0))
 
     def segment_line(self, seg: dict[str, Any]) -> str:
-        return f"[{hms(seg['start'])}] {seg['speaker']} ({seg['id']}): {seg['text']}"
+        label = seg.get("speakerLabel", seg["speaker"])
+        speaker = seg["speaker"] if label == seg["speaker"] else f"{seg['speaker']} ({label})"
+        review = " [speaker review required]" if seg.get("speakerReviewRequired") else ""
+        return f"[{hms(seg['start'])}] {speaker}{review} ({seg['id']}): {seg['text']}"
 
     def window(self, start_sec: float, end_sec: float) -> list[dict[str, Any]]:
         return [s for s in self.segments if s["end"] >= start_sec and s["start"] <= end_sec]
 
     def to_markdown(self, title: str) -> str:
         head = [f"# {title}", "", f"- duration: {hms(self.duration)}, language: {self.data.get('language')}, speakers: {', '.join(s['id'] for s in self.data.get('speakers', []))}", ""]
-        return "\n".join(head + [self.segment_line(s) for s in self.segments]) + "\n"
+        reviews = identity_review_lines(self.data.get("speakers", []))
+        return "\n".join(head + reviews + ([""] if reviews else []) + [self.segment_line(s) for s in self.segments]) + "\n"
 
     def chunks(self, minutes: int) -> list[tuple[int, float, float, list[dict[str, Any]]]]:
         """Split by wall-clock windows; returns (index, start, end, segments)."""
@@ -59,7 +70,8 @@ class Transcript:
         paths = []
         for idx, start, end, segs in self.chunks(minutes):
             p = directory / f"chunk-{idx:02d}.md"
-            body = [f"# {title}: chunk {idx} ({hms(start)}-{hms(end)})", ""] + [self.segment_line(s) for s in segs]
+            reviews = identity_review_lines(self.data.get("speakers", []), {s["speaker"] for s in segs})
+            body = [f"# {title}: chunk {idx} ({hms(start)}-{hms(end)})", "", *reviews, ""] + [self.segment_line(s) for s in segs]
             p.write_text("\n".join(body) + "\n", encoding="utf-8")
             paths.append(p)
         return paths
@@ -74,22 +86,7 @@ class Transcript:
 
 
 def apply_attribution(transcript: dict[str, Any], attribution: dict[str, Any]) -> dict[str, Any]:
-    """Apply merges + relabels from the speaker_attribution stage and attach display labels."""
-    merge_map: dict[str, str] = {}
-    for m in attribution.get("merges", []):
-        for src in m.get("from", []):
-            merge_map[src] = m["to"]
-    relabel = {r["segmentId"]: r["to"] for r in attribution.get("relabels", [])}
-    labels = {s["id"]: s.get("label") or s["id"] for s in attribution.get("speakers", [])}
-    out = json.loads(json.dumps(transcript))
-    for seg in out["segments"]:
-        spk = relabel.get(seg["id"], seg["speaker"])
-        spk = merge_map.get(spk, spk)
-        seg["speaker"] = spk
-        seg["speakerLabel"] = labels.get(spk, spk)
-    talk: dict[str, float] = {}
-    for seg in out["segments"]:
-        talk[seg["speaker"]] = talk.get(seg["speaker"], 0.0) + max(0.0, seg["end"] - seg["start"])
-    out["speakers"] = [{"id": k, "label": labels.get(k, k), "talkTimeSec": round(v, 1)} for k, v in sorted(talk.items(), key=lambda kv: -kv[1])]
-    out["attributed"] = True
-    return out
+    """Apply only verified proposals; preserve uncertain ones for review."""
+    from .attribution import reconcile_attribution
+
+    return reconcile_attribution(transcript, attribution)[1]

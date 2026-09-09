@@ -7,12 +7,16 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import boto3
+from botocore.config import Config
+from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
 from . import gateway, memory
 from .config import DATA_BUCKET, LECTURE_TABLE_NAME, MAX_RESULTS, REGION, TABLE_NAME, WEB_ORIGIN
-from .evidence import diversify, format_for_model, locate_lecture_pages, to_evidence
+from .evidence import display_snippet, diversify, format_for_model, locate_lecture_pages, to_evidence
+from ..keys import attributed_transcript
+from ..transcript import identity_review_lines
 
 log = logging.getLogger("chat.tools")
 
@@ -51,7 +55,7 @@ def _ddb():
 
 
 def _s3():
-    return boto3.client("s3", region_name=REGION)
+    return boto3.client("s3", region_name=REGION, config=Config(retries={"mode": "standard", "max_attempts": 5}))
 
 
 def _owned_meeting(ctx: TurnContext, meeting_id: str) -> dict | None:
@@ -118,13 +122,28 @@ def compact_lecture(doc: dict, lecture_id: str, page: int | None = None) -> dict
     }}
 
 
-def _read_json(key: str) -> dict | None:
+def _read_json(key: str, *, strict: bool = False) -> dict | None:
     try:
         body = _s3().get_object(Bucket=DATA_BUCKET, Key=key)["Body"].read()
         return json.loads(body)
     except Exception as exc:  # noqa: BLE001
+        missing = isinstance(exc, ClientError) and exc.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound")
+        if strict and not missing:
+            raise
         log.info("read %s failed: %s", key, exc)
         return None
+
+
+def _meeting_transcript(rec: dict) -> dict | None:
+    """Call only after ownership is checked. Match the API's completed-output selection."""
+    data = None
+    if (rec.get("stages", {}).get("speaker_attribution") or {}).get("status") == "COMPLETED":
+        data = _read_json(attributed_transcript(rec["meetingId"]), strict=True)
+    if data is None:
+        data = _read_json(rec["transcriptKey"], strict=True)
+    if data and data.get("meetingId") and data["meetingId"] != rec["meetingId"]:
+        raise ValueError("transcript belongs to a different meeting")
+    return data
 
 
 def compact_document(doc: dict, meeting_id: str) -> dict:
@@ -134,7 +153,7 @@ def compact_document(doc: dict, meeting_id: str) -> dict:
         "title": doc.get("title"),
         "date": (doc.get("generatedAt") or "")[:10],
         "meetingType": doc.get("meetingType"),
-        "speakers": [{"id": s.get("id"), "label": s.get("label"), "role": s.get("role")} for s in doc.get("speakers", [])],
+        "speakers": [{"id": s.get("id"), "label": s.get("label"), "role": s.get("role"), "reviewRequired": s.get("reviewRequired", False)} for s in doc.get("speakers", [])],
         "headline": (doc.get("summary") or {}).get("headline"),
         "overview": (doc.get("summary") or {}).get("overview"),
         "keyDecisions": (doc.get("summary") or {}).get("keyDecisions", []),
@@ -158,17 +177,46 @@ def compact_brief(brief: dict | None) -> dict | None:
     }
 
 
-def _speaker_namer(doc: dict | None, attribution: dict | None):
-    """Map raw diarization ids (S1, S2) to the display names the speaker_attribution stage decided, honoring merges and per-segment relabels."""
+def _speaker_namer(doc: dict | None):
+    """Honor edited display names while keeping the speaker ID from the selected transcript."""
     labels = {sp.get("id"): sp.get("label") or sp.get("id") for sp in (doc or {}).get("speakers", [])}
-    merged = {src: m.get("to") for m in (attribution or {}).get("merges", []) for src in m.get("from", [])}
-    relabel = {r.get("segmentId"): r.get("to") for r in (attribution or {}).get("relabels", [])}
 
     def name(seg: dict) -> str:
-        sid = relabel.get(seg.get("id")) or merged.get(seg.get("speaker"), seg.get("speaker"))
-        return str(labels.get(sid, sid))
+        sid = seg.get("speaker")
+        return str(labels.get(sid) or seg.get("speakerLabel") or sid)
 
     return name
+
+
+def _transcript_lines(data: dict, segs: list[dict], doc: dict | None) -> list[str]:
+    # Use the selected file's IDs, including the original when a corrected file is
+    # unavailable. Replaying stage proposals here can disagree with the UI.
+    name = _speaker_namer(doc)
+    review = data.get("speakerAttribution")
+    corrections = {c["id"]: c for c in (review or {}).get("corrections", [])}
+    confirmed_names = {s["id"] for s in (doc or {}).get("speakers", []) if s.get("nameConfirmedByUser")}
+    lines = []
+    for seg in segs:
+        pending = bool(seg.get("speakerReviewRequired"))
+        if review:
+            pending = any(c.get("status") == "review_required" and not (c.get("kind") == "label" and c.get("to") in confirmed_names)
+                          for cid in seg.get("speakerCorrectionIds", []) if (c := corrections.get(cid)))
+        marker = " [speaker review required]" if pending else ""
+        lines.append(f"[{int(seg['start']) // 60:02d}:{int(seg['start']) % 60:02d}] {name(seg)}{marker}: {seg.get('text')}")
+    return lines
+
+
+def _window_speakers(data: dict, segs: list[dict], doc: dict | None) -> list[dict]:
+    registry = {s["id"]: s for s in data.get("speakers", [])}
+    for speaker in (doc or {}).get("speakers", []):
+        registry[speaker["id"]] = {**registry.get(speaker["id"], {}), **speaker}
+    out = []
+    for sid in dict.fromkeys(s["speaker"] for s in segs):
+        speaker = registry.get(sid, {})
+        pending = bool(speaker.get("reviewRequired") and not speaker.get("nameConfirmedByUser"))
+        out.append({"id": sid, "label": speaker.get("label") or sid, "reviewRequired": pending,
+                    **({"proposedLabel": speaker["proposedLabel"]} if pending and speaker.get("proposedLabel") else {})})
+    return out
 
 
 def build_server(ctx: TurnContext):
@@ -213,15 +261,17 @@ def build_server(ctx: TurnContext):
             return _text({"error": "transcript not found"})
         start, end = max(0, int(args["startSec"])), int(args["endSec"])
         end = min(end, start + 600)
-        data = _read_json(rec["transcriptKey"])
+        data = _meeting_transcript(rec)
         if not data:
             return _text({"error": "transcript unavailable"})
-        name = _speaker_namer(_read_json(rec["notesKey"]) if rec.get("notesKey") else None, _read_json(f"results/{mid}/speaker_attribution.json"))
+        doc = _read_json(rec["notesKey"]) if rec.get("notesKey") else None
         segs = [s for s in data.get("segments", []) if s.get("end", 0) >= start and s.get("start", 0) <= end]
-        lines = [f"[{int(s['start']) // 60:02d}:{int(s['start']) % 60:02d}] {name(s)}: {s.get('text')}" for s in segs[:200]]
+        lines = _transcript_lines(data, segs[:200], doc)
+        speakers = _window_speakers(data, segs[:200], doc)
+        name_reviews = identity_review_lines(speakers)
         label = f"E{len(ctx.evidence) + 1}"
-        ctx.add([{"id": label, "source": "transcript", "kind": "transcript", "meetingId": mid, "title": rec.get("title"), "date": (rec.get("createdAt") or "")[:10], "meetingType": None, "snippet": " ".join(lines)[:420], "score": None, "startSec": start, "segmentIds": [s.get("id") for s in segs[:5] if s.get("id")], "url": f"{WEB_ORIGIN}/meetings/{mid}?t={start}"}])
-        return _text({"evidenceLabel": label, "lines": lines})
+        ctx.add([{"id": label, "source": "transcript", "kind": "transcript", "meetingId": mid, "title": rec.get("title"), "date": (rec.get("createdAt") or "")[:10], "meetingType": None, "snippet": display_snippet(" ".join(name_reviews + lines))[:420], "score": None, "startSec": start, "segmentIds": [s.get("id") for s in segs[:5] if s.get("id")], "url": f"{WEB_ORIGIN}/meetings/{mid}?t={start}"}])
+        return _text({"evidenceLabel": label, "lines": lines, "speakers": speakers})
 
     @tool("list_lectures", "List this user's analyzed lectures (newest first): lectureId, title, course, date, pageCount. Use it when the user refers to a lecture or class without naming it.", {"limit": int})
     async def list_lectures(args: dict) -> dict:

@@ -6,4 +6,5 @@ export * from "./memory.js";
 export * from "./chat-db.js";
 export * from "./notes-markdown.js";
 export * from "./documents.js";
+export * from "./document-lock.js";
 export * from "./lectures.js";

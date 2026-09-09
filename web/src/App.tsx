@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 import { useAuth } from "react-oidc-context";
 import { LoginPage } from "./pages/LoginPage";
@@ -13,6 +13,7 @@ import { LecturesPage } from "./pages/LecturesPage";
 const LecturePage = lazy(() => import("./pages/LecturePage").then((m) => ({ default: m.LecturePage })));
 import { TabBar } from "./components/TabBar";
 import { Spinner } from "./components/icons";
+import { renewSession } from "./lib/auth-renew";
 
 /**
  * App shell: a fixed-height flex column whose <main> scrolls internally and whose tab bar is a normal flex child.
@@ -33,14 +34,32 @@ function Shell({ children }: { children: React.ReactNode }) {
 export function App() {
   const auth = useAuth();
   const location = useLocation();
-  if (auth.isLoading || auth.activeNavigator) {
+  // A session restored from storage may hold an ID token that expired while the app was closed. oidc-client-ts only
+  // renews on its "expiring" timer, which never fires for a token that is already expired, so renew it here with the
+  // refresh token before deciding between the app and the login page.
+  const stale = !auth.isLoading && !auth.isAuthenticated && !!auth.user?.refresh_token;
+  const [renewal, setRenewal] = useState<"idle" | "running" | "done" | "failed">("idle");
+  const hadSession = useRef(false);
+  if (auth.isAuthenticated) hadSession.current = true;
+  else if (!auth.user && !auth.isLoading) hadSession.current = false;
+  useEffect(() => {
+    if (auth.isAuthenticated) { if (renewal !== "idle") setRenewal("idle"); return; }
+    if (!stale || renewal !== "idle") return;
+    setRenewal("running");
+    void renewSession(auth.signinSilent).then((user) => setRenewal(user ? "done" : "failed"), () => setRenewal("failed"));
+  }, [auth, stale, renewal]);
+  const restoring = stale && (renewal === "idle" || renewal === "running");
+  // AuthProvider marks signinSilent as loading/navigation too. Keep the authenticated
+  // component tree mounted during this background work so drafts, uploads and audio survive.
+  const backgroundRenewal = hadSession.current && !!auth.user && (auth.activeNavigator === "signinSilent" || restoring);
+  if (!backgroundRenewal && (auth.isLoading || auth.activeNavigator || restoring)) {
     return (
       <div className="min-h-dvh grid place-items-center text-ink-3">
         <div className="flex flex-col items-center gap-3"><Spinner size={24} className="text-accent" /><p className="text-sm">로그인 확인 중</p></div>
       </div>
     );
   }
-  if (!auth.isAuthenticated) {
+  if (!auth.isAuthenticated && !backgroundRenewal) {
     return (
       <Routes>
         <Route path="*" element={<LoginPage error={auth.error?.message} from={location.pathname} />} />

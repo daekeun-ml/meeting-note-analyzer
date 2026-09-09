@@ -3,6 +3,7 @@ import { IconPause, IconPlay } from "./icons";
 
 export interface AudioPlayerHandle {
   seek: (sec: number, play?: boolean) => void;
+  preservePosition?: () => void;
 }
 
 export function hms(sec: number) {
@@ -17,6 +18,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, { src: string; onTime?:
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
   const [ready, setReady] = useState(false);
+  const restore = useRef<{ time: number; playing: boolean } | null>(null);
 
   useImperativeHandle(ref, () => ({
     seek(sec, play = true) {
@@ -24,6 +26,10 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, { src: string; onTime?:
       if (!a) return;
       a.currentTime = sec;
       if (play) void a.play().catch(() => undefined);
+    },
+    preservePosition() {
+      const a = audio.current;
+      if (a && !restore.current) restore.current = { time: a.currentTime, playing: !a.paused };
     },
   }));
 
@@ -41,7 +47,17 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, { src: string; onTime?:
         ref={audio}
         src={src}
         preload="metadata"
-        onLoadedMetadata={(e) => { setDuration(e.currentTarget.duration || 0); setReady(true); }}
+        onLoadedMetadata={(e) => {
+          const a = e.currentTarget;
+          setDuration(a.duration || 0); setReady(true);
+          const saved = restore.current;
+          if (saved) {
+            restore.current = null;
+            a.currentTime = saved.time;
+            setCurrent(saved.time); onTime?.(saved.time);
+            if (saved.playing) void a.play().catch(() => undefined);
+          }
+        }}
         onDurationChange={(e) => setDuration(e.currentTarget.duration || 0)}
         onTimeUpdate={(e) => { setCurrent(e.currentTarget.currentTime); onTime?.(e.currentTarget.currentTime); }}
         onPlay={() => setPlaying(true)}

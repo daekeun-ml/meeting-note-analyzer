@@ -35,7 +35,7 @@ def test_window_and_stats():
     assert {s["id"] for s in stats} == {"S1", "S2"} and stats[0]["turns"] == 6
 
 
-def test_apply_attribution_merges_relabels_and_labels():
+def test_old_attribution_without_evidence_is_reviewed_not_applied():
     t = sample()
     attribution = {
         "speakers": [{"id": "S1", "label": "김민수 (PM)", "confidence": 0.9, "evidence": []}],
@@ -44,10 +44,11 @@ def test_apply_attribution_merges_relabels_and_labels():
         "notes": "",
     }
     out = apply_attribution(t, attribution)
-    assert out["segments"][0]["speaker"] == "S3"
-    assert all(s["speaker"] == "S1" for s in out["segments"][1:])
-    assert out["segments"][1]["speakerLabel"] == "김민수 (PM)"
-    assert out["speakers"][0]["id"] == "S1" and out["attributed"] is True
+    assert [s["speaker"] for s in out["segments"]] == [s["speaker"] for s in t["segments"]]
+    assert out["segments"][0]["speakerLabel"] == "S1"
+    # The unverified merge flags S2's utterances and the relabel flags seg-0000; the name proposal alone flags nothing.
+    assert [s["speakerReviewRequired"] for s in out["segments"]] == [i % 2 == 1 or i == 0 for i in range(12)]
+    assert out["attributed"] is True
     assert json.dumps(out)  # serializable
 
 

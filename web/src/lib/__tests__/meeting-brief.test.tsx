@@ -73,7 +73,11 @@ it("lets older meetings request a brief explicitly without retrying the original
   await act(async () => button("추가 요약 만들기").click());
   expect(api.createMeetingBrief).toHaveBeenCalledWith("m1");
   expect(api.retryMeeting).not.toHaveBeenCalled();
-  expect(element.textContent).toContain("추가 요약을 만들고 있습니다");
+  // React Query batches the result notification onto a later task.
+  await vi.waitFor(async () => {
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(element.textContent).toContain("추가 요약을 만들고 있습니다");
+  });
   expect(element.textContent).toContain("원래의 상세 개요");
 });
 it("shows empty sections truthfully for meetings without decisions or tasks", async () => {
@@ -90,4 +94,13 @@ it("shows a failed brief as retryable while the meeting itself stays completed",
   expect(element.textContent).toContain("원래의 상세 개요");
   expect(button("추가 요약 만들기")).toBeDefined();
   expect(element.textContent).not.toContain("회의 분석에 실패");
+});
+
+it("lets a long unbroken meeting title wrap instead of widening the page", async () => {
+  current = { ...current, meeting: { ...current.meeting, title: "2026-09-08_주간회의_결제모듈_PG사_타임아웃_대응_및_엑셀_익스포트_우선순위_조정_회의록_최종본_v3_공유용" } };
+  await render();
+  const title = element.querySelector("h1")!;
+  expect(title.className).toContain("min-w-0");
+  expect(title.className).toContain("[overflow-wrap:anywhere]");
+  expect(title.parentElement?.querySelector(".shrink-0")).not.toBeNull(); // the status chip keeps its width, the title gives way
 });

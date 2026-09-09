@@ -34,7 +34,7 @@ export class AuthStack extends Stack {
     this.userPoolClient = this.userPool.addClient("WebClient", {
       userPoolClientName: "web-pwa", generateSecret: false, authFlows: { userSrp: true },
       preventUserExistenceErrors: true, enableTokenRevocation: true,
-      accessTokenValidity: Duration.hours(1), idTokenValidity: Duration.hours(1), refreshTokenValidity: Duration.days(30),
+      accessTokenValidity: Duration.hours(4), idTokenValidity: Duration.hours(4), refreshTokenValidity: Duration.days(30),
       supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.COGNITO],
       oAuth: { flows: { authorizationCodeGrant: true }, scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL, cognito.OAuthScope.PROFILE], callbackUrls, logoutUrls },
     });
