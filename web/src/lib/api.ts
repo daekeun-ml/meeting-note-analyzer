@@ -76,6 +76,9 @@ export function createApi(base: string, getToken: () => string | undefined, rene
       return { ...links, document };
     },
     deleteLecture: (id: string) => call<void>("DELETE", `/lectures/${encodeURIComponent(id)}`),
+    listLectureShares: (id: string) => call<{ items: import("@meeting-notes/shared").LectureShare[] }>("GET", `/lectures/${encodeURIComponent(id)}/shares`),
+    createLectureShare: (id: string, emails: string[], expiresInDays: number) => call<{ share: import("@meeting-notes/shared").LectureShare }>("POST", `/lectures/${encodeURIComponent(id)}/shares`, { emails, expiresInDays }),
+    revokeLectureShare: (id: string, shareId: string) => call<void>("DELETE", `/lectures/${encodeURIComponent(id)}/shares/${encodeURIComponent(shareId)}`),
     me: () => call<{ sub: string; email: string | null; name: string | null }>("GET", "/me"),
     createMeeting: (input: CreateMeetingRequest) => call<CreateMeetingResponse>("POST", "/meetings", input),
     completeUpload: (id: string, body: CompleteUploadRequest) => call<void>("POST", `/meetings/${encodeURIComponent(id)}/complete-upload`, body),

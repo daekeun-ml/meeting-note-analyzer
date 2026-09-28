@@ -83,3 +83,13 @@ See [deployment](deployment.md) for setup and [operations](operations.md) for mo
 ## Chat
 
 The chat source picker offers **회의록·전사**, **강의**, and **전체**. Choose all your lectures or one completed lecture; **이 강의에 질문하기** on a lecture opens a conversation pinned to that lecture. Changing the source starts a new conversation, so its history does not mix with another source. Session scope and ownership are enforced in both search filters and direct document tools. Lecture tools read the current published document and its group-to-slide mapping, and search discards superseded runs while the knowledge base catches up.
+
+## Guest sharing
+
+Choose **게스트 공유** on a completed lecture, enter up to 20 allowed email addresses, and choose an expiry of 7, 30 or 90 days. Creating the link does not send mail. Send the link to the intended readers; they request a six-digit email code on the shared page and enter it within five minutes. Guests do not enter a password.
+
+A separate Cognito Essentials pool sends and verifies email OTPs using Cognito's default email delivery. The app client has a secret held on the server, and public self-signup is disabled. Code requests are rate limited; a challenge allows five attempts and can be used once. The verified ID token is kept in a Secure, HttpOnly, SameSite cookie for one hour. Cognito's default email sending quotas apply.
+
+Guests can read the shared lecture's published study notes and images and save the notes as PDF. They do not receive access to owner APIs, chat, original recording downloads or the full transcript. Every document and image request checks the current email allowlist, expiry, revocation and lecture ownership. Private responses are not cached; images use authenticated proxy URLs rather than bearer download links. **공유 해제** prevents subsequent reads, including image requests. Copies a reader already saved remain outside the app's control.
+
+Lecture sharing records and short-lived verification/rate-limit records use the lecture table's TTL field. Expiry is also checked in application code, independently of asynchronous TTL deletion. Existing owner sign-in configuration is unchanged.

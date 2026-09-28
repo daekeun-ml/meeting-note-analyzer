@@ -145,3 +145,16 @@ export const lectureKeys = {
   resultPrefix: (id: string) => `lecture-results/${id}/`,
   runPrefix: (id: string, runId: string) => `lecture-results/${id}/runs/${runId}/`,
 };
+
+export const createLectureShareSchema = z.object({
+  emails: z.array(z.string().trim().toLowerCase().email().max(254)).min(1).max(20).transform((values) => [...new Set(values)]),
+  expiresInDays: z.number().int().min(1).max(90).default(30),
+});
+export interface LectureShare {
+  shareId: string; lectureId: string; emails: string[]; createdAt: string; expiresAt: string; revokedAt?: string; url: string;
+}
+export interface GuestLectureResult {
+  document: LectureDocument;
+  images: { page: number; sourcePage?: number; url: string }[];
+  expiresAt: string;
+}

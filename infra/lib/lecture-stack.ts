@@ -1,5 +1,6 @@
 import { CfnOutput, Duration, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
 import * as agentcore from "aws-cdk-lib/aws-bedrockagentcore";
+import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as ddb from "aws-cdk-lib/aws-dynamodb";
 import * as assets from "aws-cdk-lib/aws-ecr-assets";
 import * as iam from "aws-cdk-lib/aws-iam";
@@ -29,6 +30,7 @@ interface LectureStackProps extends StackProps {
 export class LectureStack extends Stack {
   readonly apiFunction: lambda.IFunction;
   readonly interviewApiFunction: lambda.IFunction;
+  readonly guestApiFunction: lambda.IFunction;
   /** Lecture metadata; the chat runtime reads it for list_lectures / get_lecture. */
   readonly table: ddb.ITable;
   constructor(scope: Construct, id: string, props: LectureStackProps) {
@@ -143,6 +145,32 @@ export class LectureStack extends Stack {
     for (const prefix of ["lecture-uploads/*", "lecture-results/*"]) { dataBucket.grantReadWrite(api, prefix); dataBucket.grantDelete(api, prefix); }
     machine.grantStartExecution(api);
     this.apiFunction = api;
+    const guestPool = new cognito.CfnUserPool(this, "GuestUserPool", {
+      userPoolName: `${config.projectName}-lecture-guests`, userPoolTier: "ESSENTIALS", deletionProtection: "ACTIVE",
+      usernameAttributes: ["email"], autoVerifiedAttributes: ["email"], usernameConfiguration: { caseSensitive: false },
+      adminCreateUserConfig: { allowAdminCreateUserOnly: true }, mfaConfiguration: "OFF",
+      policies: { signInPolicy: { allowedFirstAuthFactors: ["PASSWORD", "EMAIL_OTP"] } },
+      emailConfiguration: { emailSendingAccount: "COGNITO_DEFAULT" },
+    });
+    guestPool.applyRemovalPolicy(RemovalPolicy.RETAIN);
+    const guestClient = new cognito.CfnUserPoolClient(this, "GuestUserPoolClient", {
+      userPoolId: guestPool.ref, clientName: "lecture-share-email-verification", generateSecret: true,
+      explicitAuthFlows: ["ALLOW_USER_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"], preventUserExistenceErrors: "ENABLED",
+      authSessionValidity: 5, idTokenValidity: 1, accessTokenValidity: 1, refreshTokenValidity: 1,
+      tokenValidityUnits: { idToken: "hours", accessToken: "hours", refreshToken: "days" }, enableTokenRevocation: true,
+      readAttributes: ["email", "email_verified"],
+    });
+    const guestApi = nodeFn(this, "GuestApi", { entry: "services/api/src/handlers/guest-lectures.ts",
+      environment: { LECTURE_TABLE_NAME: table.tableName, DATA_BUCKET: dataBucket.bucketName, UPLOAD_BASE_URL: config.siteUrl,
+        GUEST_USER_POOL_ID: guestPool.ref, GUEST_USER_POOL_CLIENT_ID: guestClient.ref },
+      timeout: Duration.seconds(29), memorySize: 1024 });
+    table.grantReadWriteData(guestApi);
+    dataBucket.grantRead(guestApi, "lecture-results/*");
+    guestApi.addToRolePolicy(new iam.PolicyStatement({ resources: [guestPool.attrArn],
+      actions: ["cognito-idp:AdminCreateUser", "cognito-idp:AdminGetUser", "cognito-idp:AdminInitiateAuth", "cognito-idp:AdminRespondToAuthChallenge", "cognito-idp:DescribeUserPoolClient"] }));
+    this.guestApiFunction = guestApi;
+    new CfnOutput(this, "GuestUserPoolId", { value: guestPool.ref });
+    new CfnOutput(this, "GuestUserPoolClientId", { value: guestClient.ref });
     const interviews = new InterviewService(this, "Interviews", { config, dataBucket, table: interviewTable, pushTable: props.table,
       runtimeArn: runtime.attrAgentRuntimeArn, sttEndpointName: props.sttEndpointName, sttEndpointArn: props.sttEndpointArn, alarmTopic: props.alarmTopic });
     this.interviewApiFunction = interviews.apiFunction;

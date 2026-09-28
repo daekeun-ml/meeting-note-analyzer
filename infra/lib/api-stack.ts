@@ -25,6 +25,7 @@ export interface ApiStackProps extends StackProps {
   chatMemoryArn: string;
   lectureApiFunction: lambda.IFunction;
   interviewApiFunction: lambda.IFunction;
+  guestApiFunction: lambda.IFunction;
 }
 
 export class ApiStack extends Stack {
@@ -96,9 +97,21 @@ export class ApiStack extends Stack {
       ["/api/lectures", [apigw.HttpMethod.GET, apigw.HttpMethod.POST]],
       ["/api/lectures/{id}", [apigw.HttpMethod.GET, apigw.HttpMethod.DELETE]],
       ["/api/lectures/{id}/result", [apigw.HttpMethod.GET]],
+      ["/api/lectures/{id}/shares", [apigw.HttpMethod.GET, apigw.HttpMethod.POST]],
+      ["/api/lectures/{id}/shares/{shareId}", [apigw.HttpMethod.DELETE]],
       ...["complete-upload", "start", "retry"].map((action): [string, apigw.HttpMethod[]] => [`/api/lectures/{id}/${action}`, [apigw.HttpMethod.POST]]),
     ];
     for (const [path, methods] of lectureRoutes) this.httpApi.addRoutes({ path, methods, integration: lectureIntegration, authorizer });
+    const guestIntegration = new HttpLambdaIntegration("GuestLectureIntegration", props.guestApiFunction);
+    // These routes perform email-OTP/session verification themselves. The owner's
+    // existing Cognito authorizer remains on every management and private-data route.
+    for (const [path, method] of [
+      ["/api/guest/lectures/{shareId}/request-code", apigw.HttpMethod.POST],
+      ["/api/guest/lectures/{shareId}/verify-code", apigw.HttpMethod.POST],
+      ["/api/guest/lectures/{shareId}", apigw.HttpMethod.GET],
+      ["/api/guest/lectures/{shareId}/images/{imageId}", apigw.HttpMethod.GET],
+      ["/api/guest/logout", apigw.HttpMethod.POST],
+    ] as const) this.httpApi.addRoutes({ path, methods: [method], integration: guestIntegration });
     const interviewIntegration = new HttpLambdaIntegration("InterviewIntegration", props.interviewApiFunction);
     const interviewRoutes: [string, apigw.HttpMethod[]][] = [
       ["/api/interviews", [apigw.HttpMethod.GET, apigw.HttpMethod.POST]],

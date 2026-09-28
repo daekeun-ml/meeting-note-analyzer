@@ -13,6 +13,7 @@ import { InterviewsPage } from "./pages/InterviewsPage";
 // KaTeX ships with the lecture page only; keep it out of the initial bundle.
 const LecturePage = lazy(() => import("./pages/LecturePage").then((m) => ({ default: m.LecturePage })));
 const InterviewPage = lazy(() => import("./pages/InterviewPage").then((m) => ({ default: m.InterviewPage })));
+const GuestLecturePage = lazy(() => import("./pages/GuestLecturePage").then((m) => ({ default: m.GuestLecturePage })));
 import { TabBar } from "./components/TabBar";
 import { Spinner } from "./components/icons";
 import { renewSession } from "./lib/auth-renew";
@@ -50,6 +51,9 @@ export function App() {
     setRenewal("running");
     void renewSession(auth.signinSilent).then((user) => setRenewal(user ? "done" : "failed"), () => setRenewal("failed"));
   }, [auth, stale, renewal]);
+  if (location.pathname.startsWith("/shared/lectures/")) {
+    return <Routes><Route path="/shared/lectures/:shareId" element={<Suspense fallback={<div className="grid min-h-dvh place-items-center"><Spinner /></div>}><GuestLecturePage /></Suspense>} /></Routes>;
+  }
   const restoring = stale && (renewal === "idle" || renewal === "running");
   // AuthProvider marks signinSilent as loading/navigation too. Keep the authenticated
   // component tree mounted during this background work so drafts, uploads and audio survive.

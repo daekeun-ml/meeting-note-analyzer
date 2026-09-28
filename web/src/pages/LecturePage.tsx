@@ -10,6 +10,7 @@ import { LectureProgress, LectureStatus } from "../components/LectureStatus";
 import { MathText } from "../components/MathText";
 import { LectureMathNotes } from "../components/LectureMathNotes";
 import { LectureExportButton } from "../components/LecturePrint";
+import { LectureSharing } from "../components/LectureSharing";
 import { Transcript } from "../components/Transcript";
 import { Bullets, Button, Card, InlineError, Page, Pill, SectionLabel, Segmented, Skeleton } from "../components/ui";
 import { IconChevronLeft, IconChevronRight, IconExternal, IconRefresh, IconTrash } from "../components/icons";
@@ -58,6 +59,7 @@ export function LecturePage() {
     {document?.selectedPages && <Card className="mt-3 p-4"><p className="text-sm font-semibold">분석 범위: {formatSlidePages(document.selectedPages)}페이지</p>
       <p className="mt-1 text-xs text-ink-3">원본 {document.originalPageCount}장 중 {document.selectedPages.length}장 · 주제별 학습 묶음 {document.pages.length}개</p></Card>}
     {document && lecture.status === "COMPLETED" && <Button className="mt-3" variant="secondary" loading={chat.isPending} onClick={() => chat.mutate()}>이 강의에 질문하기</Button>}
+    {document && lecture.status === "COMPLETED" && <LectureSharing lectureId={id} />}
     {chat.error && <InlineError>{chat.error.message}</InlineError>}
     {active && <Card className="mt-5 p-4"><p className="text-sm text-ink-2 mb-4">강의 내용을 정리하고 있습니다. 강의 길이와 장표 수에 따라 시간이 걸릴 수 있습니다.</p>{lecture.status === "TRANSCRIBING" && <p className="mb-4 text-xs text-ink-3">초기 준비나 대기 상태에 따라 전사에 시간이 더 걸릴 수 있습니다. 완료되면 자동으로 이어집니다.</p>}<LectureProgress lecture={lecture} /></Card>}
     {lecture.status === "UPLOAD_PENDING" && <Card className="mt-5 p-4"><p className="text-sm text-ink-2">{lecture.uploadsComplete ? "선택한 파일의 업로드가 완료되었습니다." : "파일 업로드가 완료되지 않았습니다. 업로드 화면이 열려 있다면 이어서 진행하세요. 화면을 닫았다면 이 강의를 삭제하고 다시 등록하세요."}</p>{lecture.uploadsComplete && <Button full className="mt-3" loading={start.isPending} onClick={() => start.mutate()}>강의 분석 시작</Button>}</Card>}
