@@ -40,6 +40,18 @@ it("shows study exports, unmatched speech and search failures without fabricated
   expect(question.open).toBe(false);
   expect(question.textContent).toContain("최적점을 지나칠 수 있습니다");
 });
+it("shows the request that was applied to the document as optional plain text", async () => {
+  expect([...element.querySelectorAll("summary")].some((s) => s.textContent === "추가 요청")).toBe(false);
+  const result = fixture();
+  result.document!.customPrompt = "첨부 슬라이드의 38–48페이지 위주로 보기 <script>example</script>";
+  result.lecture.customPrompt = result.document!.customPrompt;
+  api.lectureResult.mockResolvedValue(result);
+  await act(async () => { client.setQueryData(["lecture", "test"], result); await new Promise((resolve) => setTimeout(resolve, 10)); });
+  const request = [...element.querySelectorAll("details")].find((d) => d.querySelector("summary")?.textContent === "추가 요청")!;
+  expect(request.open).toBe(false);
+  expect(request.textContent).toContain("38–48페이지");
+  expect(request.querySelector("script")).toBeNull();
+});
 
 it("opens flashcards and offers to retry only the failed paper search", async () => {
   await act(async () => button("복습 카드").click());

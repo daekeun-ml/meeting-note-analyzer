@@ -20,6 +20,15 @@ const fixture = (): LectureRecord => ({ PK: "MEETING#test", SK: "META", GSI1PK: 
 beforeEach(() => { vi.resetAllMocks(); mocks.get.mockResolvedValue(fixture()); mocks.ddb.mockResolvedValue({}); mocks.claim.mockResolvedValue(undefined); mocks.release.mockResolvedValue(undefined); mocks.start.mockResolvedValue({ executionArn: "execution" }); });
 
 describe("lecture inputs", () => {
+  it("accepts omitted or blank custom requests and trims and bounds optional text", () => {
+    const input = { title: "Class", audio: { fileName: "a.mp3", contentType: "audio/mpeg", fileSize: 100 } };
+    expect(createLectureSchema.parse(input).customPrompt).toBe("");
+    expect(createLectureSchema.parse({ ...input, customPrompt: " \n " }).customPrompt).toBe("");
+    expect(createLectureSchema.parse({ ...input, customPrompt: "  첨부 슬라이드의 38–48페이지 위주로 보기  " }).customPrompt).toBe("첨부 슬라이드의 38–48페이지 위주로 보기");
+    expect(createLectureSchema.safeParse({ ...input, customPrompt: "가".repeat(2000) }).success).toBe(true);
+    expect(createLectureSchema.safeParse({ ...input, customPrompt: "가".repeat(2001) }).success).toBe(false);
+    expect(createLectureSchema.safeParse({ ...input, customPrompt: 123 }).success).toBe(false);
+  });
   it("accepts MP3 with optional slides but rejects mixed media, wrong MIME and oversized audio", () => {
     const audio = { fileName: "class.MP3", contentType: "audio/mpeg", fileSize: 100 };
     expect(createLectureSchema.safeParse({ title: "Class", audio }).success).toBe(true);
@@ -46,6 +55,18 @@ describe("lecture inputs", () => {
     expect(() => validateParts(20 * 1024 * 1024, [{ partNumber: 2, etag: "y" }, { partNumber: 1, etag: "x" }])).not.toThrow();
     expect(completeLectureUploadSchema.safeParse({ asset: "script" }).success).toBe(false);
   });
+});
+
+it("persists an optional study request in the owned lecture and returns it on result reads", async () => {
+  mocks.multipart.mockResolvedValue({ uploadId: "audio", parts: [], partSize: 16, expiresAt: "later" });
+  const result = await createLecture(caller, createLectureSchema.parse({ title: "Focused study",
+    customPrompt: "  38–48페이지를 먼저 복습하고 수식을 쉽게 설명해 주세요.  ",
+    audio: { fileName: "a.mp3", contentType: "audio/mpeg", fileSize: 100 } }));
+  const record = mocks.claim.mock.calls[0]![2].Put.Item as LectureRecord;
+  expect(record.customPrompt).toBe("38–48페이지를 먼저 복습하고 수식을 쉽게 설명해 주세요.");
+  expect(result.lecture.customPrompt).toBe(record.customPrompt);
+  mocks.get.mockResolvedValue(record);
+  expect((await lectureResult(caller, record.lectureId)).lecture.customPrompt).toBe(record.customPrompt);
 });
 
 it("rejects cross-user reads, downloads, starts, uploads and deletion before any write", async () => {
@@ -119,6 +140,7 @@ it("creates and starts a video-only lecture without requiring a slide upload", a
   mocks.list.mockResolvedValue({ items: [], cursor: null });
   mocks.multipart.mockResolvedValue({ uploadId: "video", parts: [], partSize: 16 * 1024 * 1024, expiresAt: "later" });
   const result = await createLecture(caller, createLectureSchema.parse({ title: "ML video", video: { fileName: "class.mp4", fileSize: 2 * 1024 ** 3, contentType: "video/mp4" } }));
+  expect(result.lecture.customPrompt).toBeUndefined();
   expect(mocks.multipart).toHaveBeenCalledOnce();
   expect(result.uploads.slides).toBeUndefined();
   expect(result.lecture.videoName).toBe("class.mp4");

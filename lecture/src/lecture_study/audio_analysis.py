@@ -4,6 +4,7 @@ from .parallel import parallel_map
 from .prompts import AUDIO_STUDY_TASK, STUDY_CACHE_VERSION
 from .schemas import Study
 from .study import generate_study
+from .customization import request_cache_key, request_context
 
 
 def analyze_audio(store, check, model, search, record, transcript):
@@ -32,8 +33,9 @@ def analyze_audio(store, check, model, search, record, transcript):
         evidence = [{"segmentId": s["id"], "start": s["start"], "end": s["end"], "text": s["text"], "speaker": s.get("speaker", "S1")}
                     for s in segments if s["end"] > topic["startSec"] and s["start"] < topic["endSec"]]
         reading = {"title": topic["title"], "description": topic["summary"], "concepts": []}
-        study = Study.model_validate(store.cached(f"audio-study-{i}.{STUDY_CACHE_VERSION}.json",
-            lambda: generate_study(model, AUDIO_STUDY_TASK, {"outputLanguage": language, "audience": audience, "reading": reading}, evidence))).model_dump()
+        study = Study.model_validate(store.cached(request_cache_key(f"audio-study-{i}.{STUDY_CACHE_VERSION}.json", record),
+            lambda: generate_study(model, AUDIO_STUDY_TASK, {"outputLanguage": language, "audience": audience, "reading": reading,
+                **request_context(record, sourceType="audio", startSec=topic["startSec"], endSec=topic["endSec"])}, evidence))).model_dump()
         if not evidence:
             study["spokenSummary"] = ""
         return {"page": i + 1, "title": topic["title"], "chapter": topic["chapter"], "source": "audio",

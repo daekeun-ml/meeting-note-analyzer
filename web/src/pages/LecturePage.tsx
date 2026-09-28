@@ -46,11 +46,13 @@ export function LecturePage() {
   if (query.isLoading) return <Page title="강의 불러오는 중"><Skeleton className="h-52" /></Page>;
   if (!query.data || query.error) return <Page title="강의"><InlineError>{query.error?.message ?? "강의를 찾을 수 없습니다"}</InlineError><Link to="/lectures" className="text-accent block mt-4">강의 목록</Link></Page>;
   const { lecture, document, pageImages, markdownUrl, flashcardsUrl, slidesUrl, transcriptUrl } = query.data;
+  const customPrompt = document ? document.customPrompt : lecture.customPrompt;
   if (pendingPage && document) { const index = document.pages.findIndex((p) => p.page === pendingPage); if (index >= 0) setPageIndex(index); setPendingPage(0); }
   const page = document?.pages[pageIndex];
   const active = ["UPLOADED", "PREPARING", "TRANSCRIBING", "ANALYZING"].includes(lecture.status);
   return <Page title={lecture.title} subtitle={lecture.course || "강의 학습 자료"} back={<Link to="/lectures" className="inline-flex items-center text-sm text-ink-3 mb-3"><IconChevronLeft size={16} />강의 목록</Link>}>
     <div className="flex items-center justify-between gap-2"><LectureStatus lecture={lecture} /><span className="text-xs text-ink-3">{lecture.pageCount ? `학습 항목 ${lecture.pageCount}개` : lecture.videoName ? "MP4" : lecture.audioName ? "MP3" : lecture.slidesName}{lecture.durationSec ? ` · ${hms(lecture.durationSec)}` : ""}</span></div>
+    {customPrompt && <details className="mt-3 text-sm"><summary className="cursor-pointer text-ink-3">추가 요청</summary><p className="mt-2 whitespace-pre-wrap leading-relaxed">{customPrompt}</p></details>}
     {active && <Card className="mt-5 p-4"><p className="text-sm text-ink-2 mb-4">강의 내용을 정리하고 있습니다. 강의 길이와 장표 수에 따라 시간이 걸릴 수 있습니다.</p>{lecture.status === "TRANSCRIBING" && <p className="mb-4 text-xs text-ink-3">초기 준비나 대기 상태에 따라 전사에 시간이 더 걸릴 수 있습니다. 완료되면 자동으로 이어집니다.</p>}<LectureProgress lecture={lecture} /></Card>}
     {lecture.status === "UPLOAD_PENDING" && <Card className="mt-5 p-4"><p className="text-sm text-ink-2">{lecture.uploadsComplete ? "선택한 파일의 업로드가 완료되었습니다." : "파일 업로드가 완료되지 않았습니다. 업로드 화면이 열려 있다면 이어서 진행하세요. 화면을 닫았다면 이 강의를 삭제하고 다시 등록하세요."}</p>{lecture.uploadsComplete && <Button full className="mt-3" loading={start.isPending} onClick={() => start.mutate()}>강의 분석 시작</Button>}</Card>}
     {lecture.status === "UPLOADED" && <Button full variant="secondary" className="mt-3" loading={start.isPending} onClick={() => start.mutate()}>처리 시작 확인</Button>}

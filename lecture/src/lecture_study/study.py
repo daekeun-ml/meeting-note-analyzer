@@ -2,6 +2,7 @@
 import json
 
 from .schemas import Study
+from .customization import request_task
 
 
 def deck_context(record, slides, readings):
@@ -24,6 +25,7 @@ def validate_references(study, context):
 
 
 def generate_study(model, task, base, evidence, pictures=None):
+    task = request_task(task, base)
     groups, current, size = [], [], 0
     for item in evidence:
         length = len(json.dumps(item, ensure_ascii=False))

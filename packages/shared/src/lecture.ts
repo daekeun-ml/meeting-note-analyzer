@@ -2,7 +2,7 @@ import { z } from "zod";
 import { CONSTRAINTS, OUTPUT_LANGUAGES, type OutputLanguage } from "./constants.js";
 import type { UploadPartTarget } from "./meeting.js";
 
-export const LECTURE_LIMITS = { maxVideoBytes: 4 * 1024 ** 3, maxAudioBytes: CONSTRAINTS.maxUploadBytes, maxSlidesBytes: 100 * 1024 * 1024, maxPages: 120, maxVideoScenes: 240, maxResultPages: 360, maxActive: 3, uploadExpirySec: 4 * 3600 } as const;
+export const LECTURE_LIMITS = { maxVideoBytes: 4 * 1024 ** 3, maxAudioBytes: CONSTRAINTS.maxUploadBytes, maxSlidesBytes: 100 * 1024 * 1024, maxPages: 120, maxVideoScenes: 240, maxResultPages: 360, maxActive: 3, uploadExpirySec: 4 * 3600, maxCustomPromptChars: 2000 } as const;
 export const SLIDE_TYPES = { pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation", pdf: "application/pdf" } as const;
 export const LECTURE_STAGES = ["video", "stt", "slides", "alignment", "study", "papers"] as const;
 export type LectureStage = (typeof LECTURE_STAGES)[number];
@@ -12,6 +12,7 @@ const file = z.object({ fileName: z.string().trim().min(1).max(255), fileSize: z
 export const createLectureSchema = z.object({
   title: z.string().trim().min(1).max(200),
   course: z.string().trim().max(120).default(""),
+  customPrompt: z.string().trim().max(LECTURE_LIMITS.maxCustomPromptChars, "추가 요청은 2,000자 이하로 입력하세요").default(""),
   outputLanguage: z.enum(OUTPUT_LANGUAGES).default("ko"),
   languageHint: z.enum(["ko", "en", "ja", "zh", "auto"]).default("auto"),
   video: file.extend({ fileSize: z.number().int().positive().max(LECTURE_LIMITS.maxVideoBytes), contentType: z.literal("video/mp4") })
@@ -26,6 +27,7 @@ export type LectureAsset = { key: string; uploadId: string; fileName: string; fi
 export interface LectureRecord {
   PK: string; SK: "META"; GSI1PK: string; GSI1SK: string;
   lectureId: string; owner: string; title: string; course: string;
+  customPrompt?: string;
   status: "UPLOAD_PENDING" | "UPLOADED" | "PREPARING" | "TRANSCRIBING" | "ANALYZING" | "COMPLETED" | "FAILED";
   outputLanguage: OutputLanguage; languageHint: string;
   assets: { video?: LectureAsset; audio?: LectureAsset; slides?: LectureAsset };
@@ -85,6 +87,7 @@ export interface LecturePage {
 }
 export interface LectureDocument {
   version: 1; lectureId: string; title: string; course: string; generatedAt: string; outputLanguage: string;
+  customPrompt?: string;
   overview: string; learningObjectives: string[]; reviewPlan: string[]; durationSec: number;
   audience?: LectureAudience | null;
   pages: LecturePage[]; warnings: string[];

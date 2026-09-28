@@ -1,5 +1,6 @@
 import csv
 import io
+import re
 
 DIFFICULTY = {"basic": "기본", "understand": "이해", "apply": "적용"}
 NOTE_KIND = {"definition": "정의", "theorem": "정리", "lemma": "보조정리", "formula": "공식", "example": "예제"}
@@ -7,6 +8,10 @@ NOTE_KIND = {"definition": "정의", "theorem": "정리", "lemma": "보조정리
 
 def markdown(document: dict) -> str:
     lines = [f"# {document['title']}", "", document["overview"]]
+    if document.get("customPrompt"):
+        prompt = document["customPrompt"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        prompt = re.sub(r"([\\`*_\[\]#])", r"\\\1", prompt)
+        lines.extend(["", "## 추가 요청", *["> " + line for line in prompt.splitlines()]])
     audience = document.get("audience")
     if audience:
         lines.extend(["", "## 이 강의의 대상", f"- 수준: {audience['level']}", f"- 전제 지식: {', '.join(audience['priorKnowledge']) or '없음'}", f"- 강의 목표: {audience['lectureGoal']}"])

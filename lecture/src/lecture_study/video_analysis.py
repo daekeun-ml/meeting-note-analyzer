@@ -12,6 +12,7 @@ from .parallel import parallel_map
 from .prompts import STUDY_CACHE_VERSION, VIDEO_STUDY_TASK
 from .schemas import SlideReading, Study, VideoMatch, VideoObservation
 from .study import deck_context, generate_study
+from .customization import request_cache_key, request_context
 
 
 def fingerprint(path: Path):
@@ -88,10 +89,10 @@ def topic_reading(topic: dict, observations: list[dict]) -> dict:
     return {"title": topic["title"], "description": description[:2400], "concepts": concepts, "visualType": max(set(kinds), key=kinds.count)}
 
 
-def make_study(model, language, reading, evidence, visual_notes, pictures, matched=True, audience=None, source_context=None):
+def make_study(model, language, reading, evidence, visual_notes, pictures, matched=True, audience=None, source_context=None, preferences=None):
     return generate_study(model, VIDEO_STUDY_TASK,
         {"outputLanguage": language, "audience": audience, "reading": reading, "videoMatched": matched,
-         "visualObservations": [n[:600] for n in visual_notes], "sourceContext": source_context or {}}, evidence, pictures)
+         "visualObservations": [n[:600] for n in visual_notes], "sourceContext": source_context or {}, **(preferences or {})}, evidence, pictures)
 
 
 def analyze_video(store, workdir, check, model, search, render):
@@ -160,12 +161,14 @@ def analyze_video(store, workdir, check, model, search, render):
         def study_and_image():
             if deck_index is not None:
                 pictures = [deck[deck_index]["image"]]
-                study = store.cached(f"page-study-{i}.{STUDY_CACHE_VERSION}.json", lambda: make_study(model, language, reading, evidence, [observations[j]["description"] for j in selected], pictures, bool(selected), audience, source_context))
+                preferences = request_context(record, sourceType="deck", deckPage=deck[deck_index]["page"])
+                study = store.cached(request_cache_key(f"page-study-{i}.{STUDY_CACHE_VERSION}.json", record), lambda: make_study(model, language, reading, evidence, [observations[j]["description"] for j in selected], pictures, bool(selected), audience, source_context, preferences))
                 image_bytes = pictures[0].read_bytes()
             else:
                 notes = [observations[j]["description"] for j in spaced(selected, 12)]
                 with scene_first_frames(store, [scenes[j] for j in spaced(selected, 6)], workdir) as pictures:
-                    study = store.cached(f"topic-study-{i}.{STUDY_CACHE_VERSION}.json", lambda: make_study(model, language, reading, evidence, notes, pictures, True, audience, source_context))
+                    preferences = request_context(record, sourceType="video", videoRanges=[{"startSec": r["startSec"], "endSec": r["endSec"]} for r in ranges])
+                    study = store.cached(request_cache_key(f"topic-study-{i}.{STUDY_CACHE_VERSION}.json", record), lambda: make_study(model, language, reading, evidence, notes, pictures, True, audience, source_context, preferences))
                     # Keep the existing PNG preview/download contract.
                     import io
                     output = io.BytesIO()

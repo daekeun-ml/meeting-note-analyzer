@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 
 from .alignment import page_evidence, transcript_batches, validate_alignment
+from .customization import custom_prompt, request_cache_key, request_context, request_task
 from .export import flashcard_csv, markdown
 from .model import Model
 from .parallel import parallel_map
@@ -24,7 +25,7 @@ def learner_profile(store, model, language, record, sections, segments) -> dict:
 
 
 
-def research_page(model: Model, search: GatewaySearch, page: dict, max_queries: int = 2) -> dict:
+def research_page(model: Model, search: GatewaySearch, page: dict, max_queries: int = 2, preferences=None) -> dict:
     queries = list(dict.fromkeys(q.strip()[:200] for q in page.get("searchQueries", []) if q.strip()))[:max_queries]
     sources, seen = [], set()
     try:
@@ -36,9 +37,9 @@ def research_page(model: Model, search: GatewaySearch, page: dict, max_queries: 
                     sources.append(result)
         if not sources:
             return {"status": "none", "queries": queries, "papers": []}
-        chosen = model.generate(Papers,
-            "Select up to 3 directly relevant ACADEMIC PAPERS, journal articles or research preprints from the search results. Exclude blogs, generic homepages, product documentation and unrelated papers. Select none if no credible paper matches. Never invent bibliographic details or claim to have read the full paper: relevance and suggested sections to read are based on the provided search snippets. Return only sourceId indices and guidance, in the output language.",
-            {"outputLanguage": page["outputLanguage"], "slide": page["title"], "concepts": page["concepts"], "sources": [{"sourceId": i, **s} for i, s in enumerate(sources)]},
+        data = {"outputLanguage": page["outputLanguage"], "slide": page["title"], "concepts": page["concepts"], "sources": [{"sourceId": i, **s} for i, s in enumerate(sources)], **(preferences or {})}
+        task = "Select up to 3 directly relevant ACADEMIC PAPERS, journal articles or research preprints from the search results. Exclude blogs, generic homepages, product documentation and unrelated papers. Select none if no credible paper matches. Never invent bibliographic details or claim to have read the full paper: relevance and suggested sections to read are based on the provided search snippets. Return only sourceId indices and guidance, in the output language."
+        chosen = model.generate(Papers, request_task(task, data), data,
             validate=lambda value: selected_papers(value, sources))
         papers = selected_papers(chosen, sources)
         return {"status": "found" if papers else "none", "queries": queries, "papers": papers}
@@ -50,6 +51,7 @@ def research_page(model: Model, search: GatewaySearch, page: dict, max_queries: 
 
 def analyze(store, workdir: Path, check, model=None, search=None, render=render_deck):
     record = store.record()
+    custom_prompt(record)  # Validate optional preferences before making model calls.
     model = model or Model(check=check)
     search = search or GatewaySearch()
     if record["assets"].get("video"):
@@ -102,9 +104,10 @@ def analyze(store, workdir: Path, check, model=None, search=None, render=render_
         evidence, alignment = page_evidence(slide["page"], alignments, batches)
         def make_study(slide=slide, reading=reading, evidence=evidence, alignment=alignment):
             return generate_study(model, STUDY_TASK,
-                {"outputLanguage": language, "audience": audience, "reading": reading, "nativeText": slide["text"], "alignment": alignment, "sourceContext": source_context},
+                {"outputLanguage": language, "audience": audience, "reading": reading, "nativeText": slide["text"], "alignment": alignment, "sourceContext": source_context,
+                 **request_context(record, sourceType="deck", deckPage=slide["page"])},
                 evidence, [slide["image"]])
-        study = Study.model_validate(store.cached(f"study-{slide['page']}.{STUDY_CACHE_VERSION}.json", make_study)).model_dump()
+        study = Study.model_validate(store.cached(request_cache_key(f"study-{slide['page']}.{STUDY_CACHE_VERSION}.json", record), make_study)).model_dump()
         if not evidence:
             study["spokenSummary"] = ""
         return {"page": slide["page"], "title": reading["title"], "sourceFile": source_context["fileName"], "slideText": slide["text"], "imageKey": store.prefix + f"slides/{slide['page']}.png", "alignment": alignment, "evidence": evidence, "outputLanguage": language, **study}
@@ -128,18 +131,25 @@ def research_groups(pages: list[dict]) -> list[dict]:
     return groups
 
 
-def research_group(model: Model, search: GatewaySearch, group: dict) -> dict:
+def research_group(model: Model, search: GatewaySearch, group: dict, preferences=None) -> dict:
     pages = group["pages"]
+    if preferences:
+        preferences = {**preferences, "requestScope": {**preferences.get("requestScope", {}), "currentSections": [
+            {"sourceType": p.get("source", "deck"), "deckPage": p.get("deckPage", p["page"]) if p.get("source", "deck") == "deck" else None}
+            for p in pages]}}
     if "chapter" not in group:
-        return research_page(model, search, pages[0])
+        return research_page(model, search, pages[0], preferences=preferences)
     queries = list(dict.fromkeys(q for page in pages for q in page.get("searchQueries", [])))
     concepts = list({c["term"]: c for page in pages for c in page.get("concepts", [])}.values())[:12]
-    return research_page(model, search, {"page": pages[0]["page"], "title": group["chapter"], "concepts": concepts, "searchQueries": queries, "outputLanguage": pages[0]["outputLanguage"]}, max_queries=3)
+    return research_page(model, search, {"page": pages[0]["page"], "title": group["chapter"], "concepts": concepts, "searchQueries": queries, "outputLanguage": pages[0]["outputLanguage"]}, max_queries=3, preferences=preferences)
 
 
 def finish_lecture(store, model, search, check, record, language, pages, duration, video_analysis=None, audience=None):
+    preferences = request_context(record, availableDeckPages=[
+        p.get("deckPage", p["page"]) for p in pages if p.get("source", "deck") == "deck"
+    ])
     groups = research_groups(pages)
-    researched = parallel_map(groups, lambda group: store.cached(group["key"], lambda: research_group(model, search, group), accept=lambda value: value.get("status") != "failed"),
+    researched = parallel_map(groups, lambda group: store.cached(request_cache_key(group["key"], record), lambda: research_group(model, search, group, preferences), accept=lambda value: value.get("status") != "failed"),
                               check=check, on_done=lambda n: store.progress("papers", n, len(groups)))
     for group, research in zip(groups, researched, strict=True):
         for page in group["pages"]:
@@ -149,15 +159,19 @@ def finish_lecture(store, model, search, check, record, language, pages, duratio
         del page["outputLanguage"]
     def overview_task():
         task = "Summarize this lecture and propose a practical ordered review plan with learning objectives. Use only the provided summaries for lecture claims. Study recommendations are suggestions; never predict exam questions. Use the output language."
+        task = request_task(task, preferences)
         rows = [{"page": p["page"], "title": p["title"], "summary": p["slideSummary"][:650], "spoken": p["spokenSummary"][:300]} for p in pages]
+        if preferences:
+            for row, page in zip(rows, pages, strict=True):
+                row.update(sourceType=page.get("source", "deck"), deckPage=page.get("deckPage", page["page"]) if page.get("source", "deck") == "deck" else None)
         if len(rows) > 100:
             groups = []
             for i in range(0, len(rows), 60):
-                part = store.cached(f"overview-part-{i}.json", lambda i=i: model.generate(Overview, task, {"outputLanguage": language, "pages": rows[i:i + 60]}).model_dump())
+                part = store.cached(request_cache_key(f"overview-part-{i}.json", record), lambda i=i: model.generate(Overview, task, {"outputLanguage": language, "pages": rows[i:i + 60], **preferences}).model_dump())
                 groups.append({"overview": part["overview"][:2000], "learningObjectives": [x[:300] for x in part["learningObjectives"][:8]]})
-            return model.generate(Overview, task, {"outputLanguage": language, "title": record["title"], "parts": groups}).model_dump()
-        return model.generate(Overview, task, {"outputLanguage": language, "title": record["title"], "course": record["course"], "pages": rows}).model_dump()
-    overview = Overview.model_validate(store.cached("overview.json", overview_task)).model_dump()
+            return model.generate(Overview, task, {"outputLanguage": language, "title": record["title"], "parts": groups, **preferences}).model_dump()
+        return model.generate(Overview, task, {"outputLanguage": language, "title": record["title"], "course": record["course"], "pages": rows, **preferences}).model_dump()
+    overview = Overview.model_validate(store.cached(request_cache_key("overview.json", record), overview_task)).model_dump()
     warnings = []
     uncertain = sum(p["alignment"]["status"] != "matched" for p in pages)
     failures = sum(p["research"]["status"] == "failed" for p in pages)
@@ -174,6 +188,8 @@ def finish_lecture(store, model, search, check, record, language, pages, duratio
         warnings.append(f"{failures}개 {unit}의 논문 검색이 완료되지 않았습니다. 다시 시도하면 완료된 자료는 재사용합니다.")
     warnings.append("논문 안내는 검색 결과의 제목과 발췌문을 근거로 합니다. 세부 내용과 출판 상태는 연결된 원문에서 확인하세요.")
     document = {"version": 1, "lectureId": record["lectureId"], "title": record["title"], "course": record["course"], "generatedAt": now(), "outputLanguage": language, "durationSec": duration, "audience": audience, **overview, "pages": pages, "warnings": warnings, **({"videoAnalysis": video_analysis} if video_analysis else {})}
+    if preferences:
+        document["customPrompt"] = preferences["customPrompt"]
     document["usage"] = {**(model.metrics() if hasattr(model, "metrics") else {}), **(search.metrics() if hasattr(search, "metrics") else {})}
     check()
     run = store.run_prefix

@@ -11,6 +11,7 @@ import { IconVideo, IconStudy, IconFileAudio } from "../components/icons";
 export function LectureUploadForm() {
   const api = useApi(); const nav = useNavigate(); const qc = useQueryClient();
   const [title, setTitle] = useState(""); const [course, setCourse] = useState("");
+  const [customPrompt, setCustomPrompt] = useState("");
   const [mediaKind, setMediaKind] = useState<"video" | "audio">("video");
   const [media, setMedia] = useState<File | null>(null); const [slides, setSlides] = useState<File | null>(null);
   const slidesInput = useRef<HTMLInputElement>(null); const [badSlides, setBadSlides] = useState(false);
@@ -25,7 +26,7 @@ export function LectureUploadForm() {
     if (!media || badSlides) return;
     setError(""); setBusy(true);
     try {
-      const parsed = createLectureSchema.safeParse({ title, course, outputLanguage: language, languageHint: hint,
+      const parsed = createLectureSchema.safeParse({ title, course, customPrompt, outputLanguage: language, languageHint: hint,
         [mediaKind]: { fileName: media.name, fileSize: media.size, contentType: isVideo ? "video/mp4" : "audio/mpeg" },
         slides: slides ? { fileName: slides.name, fileSize: slides.size, contentType: /\.pdf$/i.test(slides.name) ? SLIDE_TYPES.pdf : SLIDE_TYPES.pptx } : undefined });
       if (!parsed.success) throw new Error(parsed.error.issues.map((x) => x.message).join(", "));
@@ -66,6 +67,14 @@ export function LectureUploadForm() {
       <Card className="p-4"><label className="block"><span className="flex items-center gap-2 font-semibold"><IconStudy className="text-accent" />장표 첨부 <span className="text-xs font-normal text-ink-3">선택</span></span><span className="block mt-1 text-xs text-ink-3">PPTX 또는 PDF · 최대 100MB, 120장</span><input ref={slidesInput} aria-label="강의 장표 (선택)" type="file" accept=".pptx,.pdf" className="block mt-3 w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-surface-3 file:px-3 file:py-2 file:text-ink" onChange={(e) => chooseSlides(e.target.files?.[0] ?? null)} /></label><p className="text-xs text-ink-3 leading-relaxed mt-3">{isVideo ? "첨부하면 영상 속 화면을 원본 장표와 대조합니다. 장표 없이 영상만 올려도 분석할 수 있습니다." : "첨부하면 발언과 장표를 연결해 이론과 수식을 설명합니다. 장표 없이 음성만 올리면 발언을 주제별로 정리합니다."}</p>{(slides || badSlides) && <Button variant="ghost" size="sm" className="mt-2" onClick={() => { chooseSlides(null); if (slidesInput.current) slidesInput.current.value = ""; }}>첨부 취소</Button>}</Card>
       <label className="block"><SectionLabel>강의 제목</SectionLabel><input aria-label="강의 제목" maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 머신러닝 3주차 — 최적화" className={inputClass} /></label>
       <label className="block"><SectionLabel>과목명 (선택)</SectionLabel><input aria-label="과목명" maxLength={120} value={course} onChange={(e) => setCourse(e.target.value)} placeholder="예: 고급 머신러닝" className={inputClass} /></label>
+      <label className="block"><SectionLabel>추가 요청 (선택)</SectionLabel>
+        <textarea aria-label="추가 요청 (선택)" aria-describedby="lecture-custom-prompt-help" maxLength={LECTURE_LIMITS.maxCustomPromptChars} rows={4}
+          value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)}
+          placeholder="예: 첨부 슬라이드의 38–48페이지 위주로 정리하고, 수식 유도는 쉬운 예시와 함께 설명해 주세요."
+          className="mt-2 w-full rounded-xl bg-surface border border-line px-3 py-3 text-[16px] focus:outline-none focus:border-accent" />
+        <span id="lecture-custom-prompt-help" className="block mt-2 text-xs text-ink-3 leading-relaxed">집중할 범위나 설명 방식을 적어주세요. 비워 두어도 됩니다. 페이지는 첨부파일의 첫 장을 1페이지로 셉니다.</span>
+        <span className="block mt-1 text-right text-xs text-ink-3">{customPrompt.length.toLocaleString()} / {LECTURE_LIMITS.maxCustomPromptChars.toLocaleString()}</span>
+      </label>
       <div><SectionLabel>학습 자료 언어</SectionLabel><Segmented className="mt-2" value={language} onChange={setLanguage} options={[{ value: "ko", label: "한국어" }, { value: "en", label: "English" }, { value: "auto", label: "강의 언어" }]} /></div>
       <label className="block"><SectionLabel>강의에서 사용하는 언어</SectionLabel><select aria-label="강의 언어" className={inputClass} value={hint} onChange={(e) => setHint(e.target.value)}><option value="auto">자동 감지</option><option value="ko">한국어</option><option value="en">English</option><option value="ja">日本語</option><option value="zh">中文</option></select></label>
     </fieldset>

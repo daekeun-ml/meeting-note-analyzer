@@ -26,6 +26,7 @@ export async function createLecture(caller: Caller, input: z.output<typeof creat
     if (input.slides) slides = await createMultipartUpload(slidesKey, input.slides.contentType, input.slides.fileSize, LECTURE_LIMITS.uploadExpirySec);
     const rec: LectureRecord = { ...lectureKeys.record(id), SK: "META", GSI1PK: lectureKeys.user(caller.sub), GSI1SK: now,
       lectureId: id, owner: caller.sub, title: input.title, course: input.course, outputLanguage: input.outputLanguage, languageHint: input.languageHint,
+      ...(input.customPrompt ? { customPrompt: input.customPrompt } : {}),
       status: "UPLOAD_PENDING", stages: {}, createdAt: now, updatedAt: now,
       assets: { [mediaKind]: { ...mediaInput, key: mediaKey, uploadId: media.uploadId, complete: false }, ...(slides && input.slides ? { slides: { ...input.slides, key: slidesKey, uploadId: slides.uploadId, complete: false } } : {}) },
     };

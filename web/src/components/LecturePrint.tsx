@@ -11,6 +11,7 @@ export function LecturePrint({ document: doc }: { document: LectureDocument }) {
   return createPortal(<article className="lecture-print" lang={doc.outputLanguage}>
     <h1>{doc.title}</h1>
     <p>{doc.course} · {doc.generatedAt.slice(0, 10)} · {hms(doc.durationSec)}</p>
+    {doc.customPrompt && <><h2>추가 요청</h2><p className="whitespace-pre-wrap">{doc.customPrompt}</p></>}
     <h2>전체 정리</h2><Text text={doc.overview} />
     {doc.audience && <><h2>이 강의의 대상</h2><Text text={doc.audience.level} /><List items={doc.audience.priorKnowledge} /><Text text={doc.audience.lectureGoal} /></>}
     <h2>학습 목표</h2><List items={doc.learningObjectives} />

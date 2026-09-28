@@ -2,6 +2,10 @@
 
 Select **영상 MP4** or **음성 MP3** in the lecture upload form. A PPTX or PDF slide deck is optional for either format. Upload one recording per lecture.
 
+**추가 요청 (선택)** accepts up to 2,000 characters for study preferences, such as “첨부 슬라이드의 38–48페이지 위주로 정리하고 수식은 쉬운 예시로 설명해 주세요.” Leaving it blank keeps the default analysis. Page numbers refer to the attached file's physical order, starting at 1. Requests guide explanation depth, emphasis, paper selection and review order; the original slide readings and speech alignment remain evidence based. Emphasis requests keep other sections available with briefer coverage.
+
+The same request is available in the lecture detail view and exports. Customized study, paper and overview caches are separate from the default results. Retrying reuses the recording, transcript and source readings, while a different request cannot reuse an older request's study output. A page-specific request without the relevant attachment cannot supply missing source content.
+
 For MP3 with slides, the pipeline matches recorded speech to the original pages by conceptual evidence. For MP3 alone, it organizes the transcript into chapters and topics, preserving timestamps for audio playback. Audio-only notes do not claim to have seen slides or diagrams. The prepare step probes the actual MP3 format and duration; a renamed non-MP3 file is rejected.
 
 The pipeline extracts audio for transcription, samples video frames, and connects visible sections with spoken explanations. Sections confidently matched to an attached slide remain linked to that page. The remaining sections are grouped into chapters and topics using the timestamped speech and visual observations. Each topic becomes a study page with notes, concepts, questions, flashcards, and research references.
