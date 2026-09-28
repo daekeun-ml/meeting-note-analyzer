@@ -63,9 +63,11 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
   // The runtime re-checks ownership, but rejecting foreign session ids here keeps them from ever reaching it.
   const session = await getOwnedChatSession(sub, req.sessionId);
   if (!session) return endWithError(responseStream, 404, "chat session not found");
+  if (req.meetingId && req.meetingId !== session.meetingId) return endWithError(responseStream, 400, "대상을 바꾸려면 새 대화를 시작하세요");
 
   const out = awslambda.HttpResponseStream.from(responseStream, { statusCode: 200, headers: SSE_HEADERS });
-  const payload = { sub, sessionId: req.sessionId, message: req.message, meetingId: req.meetingId ?? session.meetingId, language: req.language ?? "ko" };
+  const payload = { sub, sessionId: req.sessionId, message: req.message, meetingId: session.meetingId, lectureId: session.lectureId,
+    sourceType: session.sourceType ?? (session.meetingId ? "meeting" : "all"), language: req.language ?? "ko" };
   try {
     const res = await agentcore.send(
       new InvokeAgentRuntimeCommand({

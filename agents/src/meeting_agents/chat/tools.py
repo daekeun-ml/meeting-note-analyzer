@@ -36,6 +36,8 @@ TOOL_NAMES = [
 class TurnContext:
     sub: str
     meeting_id: str | None = None
+    lecture_id: str | None = None
+    source_type: str = "all"
     evidence: list[dict[str, Any]] = field(default_factory=list)
     new_evidence: list[dict[str, Any]] = field(default_factory=list)  # drained by the streamer after each tool call
     clarify: dict[str, Any] | None = None  # set by ask_user: the turn ends with a question and tappable options
@@ -59,6 +61,8 @@ def _s3():
 
 
 def _owned_meeting(ctx: TurnContext, meeting_id: str) -> dict | None:
+    if ctx.source_type == "lecture" or ctx.lecture_id or (ctx.meeting_id and ctx.meeting_id != meeting_id):
+        return None
     rec = _ddb().get_item(Key={"PK": f"MEETING#{meeting_id}", "SK": "META"}).get("Item")
     if not rec or rec.get("owner") != ctx.sub:
         return None
@@ -76,6 +80,8 @@ def _lectures():
 
 
 def _owned_lecture(ctx: TurnContext, lecture_id: str) -> dict | None:
+    if ctx.source_type == "meeting" or ctx.meeting_id or (ctx.lecture_id and ctx.lecture_id != lecture_id):
+        return None
     rec = _lectures().get_item(Key={"PK": f"MEETING#{lecture_id}", "SK": "META"}).get("Item")
     if not rec or rec.get("owner") != ctx.sub:
         return None
@@ -108,16 +114,17 @@ def compact_lecture(doc: dict, lecture_id: str, page: int | None = None) -> dict
         return {
             "lectureId": lecture_id, "title": doc.get("title"), "course": doc.get("course"), "audienceLevel": audience.get("level"),
             "overview": (doc.get("overview") or "")[:1500], "learningObjectives": doc.get("learningObjectives", [])[:10], "reviewPlan": doc.get("reviewPlan", [])[:10],
-            "pages": [{"page": p.get("page"), "title": p.get("title"), "startSec": (p.get("videoRanges") or [{}])[0].get("startSec")} for p in pages],
+            "selectedPages": doc.get("selectedPages"), "grouped": doc.get("grouped", False),
+            "pages": [{"page": p.get("page"), "sourcePages": p.get("sourcePages"), "title": p.get("title"), "startSec": (p.get("videoRanges") or [{}])[0].get("startSec")} for p in pages],
         }
     match = next((p for p in pages if p.get("page") == page), None)
     if not match:
         return {"error": "page not found", "pages": [p.get("page") for p in pages]}
     return {"lectureId": lecture_id, "title": doc.get("title"), "page": {
-        "page": match.get("page"), "title": match.get("title"), "startSec": (match.get("videoRanges") or [{}])[0].get("startSec"),
+        "page": match.get("page"), "sourcePages": match.get("sourcePages"), "title": match.get("title"), "startSec": (match.get("videoRanges") or [{}])[0].get("startSec"),
         "slideSummary": match.get("slideSummary"), "spokenSummary": match.get("spokenSummary"), "explanation": (match.get("explanation") or "")[:2000],
         "concepts": match.get("concepts", []),
-        "mathNotes": [{k: n.get(k) for k in ("kind", "name", "statement", "steps", "intuition", "supplementary")} for n in match.get("mathNotes", [])],
+        "mathNotes": [{k: n.get(k) for k in ("kind", "name", "statement", "steps", "intuition", "supplementary", "symbols", "assumptions", "sourceCheck")} for n in match.get("mathNotes", [])],
         "reviewQuestions": match.get("reviewQuestions", []), "flashcards": match.get("flashcards", []),
     }}
 
@@ -219,12 +226,55 @@ def _window_speakers(data: dict, segs: list[dict], doc: dict | None) -> list[dic
     return out
 
 
+def scoped_results(ctx: TurnContext, results: list[dict]) -> list[dict]:
+    """Defense in depth: enforce the fixed session scope and discard superseded lecture runs."""
+    allowed = []
+    for result in results:
+        meta = result.get("metadata") or {}
+        if meta.get("owner") != ctx.sub:
+            continue
+        uri = ((result.get("location") or {}).get("s3Location") or {}).get("uri") or meta.get("x-amz-bedrock-kb-source-uri") or ""
+        lecture = meta.get("kind") == "lecture" or "/lecture-results/" in uri
+        if lecture:
+            lid = meta.get("lectureId")
+            if not lid:
+                continue
+            rec = _owned_lecture(ctx, lid)
+            if not rec or not rec.get("documentKey"):
+                continue
+            key = rec.get("markdownKey") or rec["documentKey"].removesuffix("document.json") + "study.md"
+            if not uri.endswith("/" + key):
+                continue
+        elif ctx.source_type == "lecture" or ctx.lecture_id or (ctx.meeting_id and meta.get("meetingId") != ctx.meeting_id):
+            continue
+        allowed.append(result)
+    return allowed
+
+
+def scoped_list(ctx, kind, limit=20):
+    if kind == "lecture":
+        if ctx.source_type == "meeting" or ctx.meeting_id:
+            return []
+        if ctx.lecture_id:
+            rec = _owned_lecture(ctx, ctx.lecture_id)
+            return [_lecture_row(rec)] if rec and rec.get("status") == "COMPLETED" else []
+        return _completed_lectures(ctx.sub, limit)
+    if ctx.source_type == "lecture" or ctx.lecture_id:
+        return []
+    if ctx.meeting_id:
+        rec = _owned_meeting(ctx, ctx.meeting_id)
+        return [{"meetingId": rec["meetingId"], "title": rec.get("title"), "date": (rec.get("createdAt") or "")[:10]}] if rec else []
+    return _completed_meetings(ctx.sub, limit)
+
+
 def build_server(ctx: TurnContext):
     @tool("search_meetings", "Hybrid search over this user's meeting documents, transcripts and lecture study notes (managed knowledge base). Returns passages labeled [E#] that you must cite. Use a focused query; optionally restrict to one meetingId.", {"query": str, "meetingId": str})
     async def search_meetings(args: dict) -> dict:
-        meeting_id = args.get("meetingId") or ctx.meeting_id
+        meeting_id = ctx.meeting_id or (args.get("meetingId") if ctx.source_type != "lecture" and not ctx.lecture_id else None)
         # Ask for more than we show, then cap chunks per document: a single long meeting used to fill all 8 slots.
-        results = gateway.retrieve(str(args["query"]), sub=ctx.sub, meeting_id=meeting_id or None, k=MAX_RESULTS + 4)
+        results = gateway.retrieve(str(args["query"]), sub=ctx.sub, meeting_id=meeting_id or None, k=MAX_RESULTS + 4,
+                                   source_type=ctx.source_type, lecture_id=ctx.lecture_id)
+        results = scoped_results(ctx, results)
         items = to_evidence(diversify(results, per_document=3 if not meeting_id else MAX_RESULTS, limit=MAX_RESULTS), web_origin=WEB_ORIGIN, start_index=len(ctx.evidence))
         locate_lecture_pages(items, lambda lid: _lecture_document(ctx, lid))
         ctx.add(items)
@@ -249,8 +299,7 @@ def build_server(ctx: TurnContext):
     @tool("list_meetings", "List this user's meetings (newest first): meetingId, title, date, type, status. Use it when the user refers to a meeting without naming it.", {"limit": int})
     async def list_meetings(args: dict) -> dict:
         limit = max(1, min(int(args.get("limit") or 20), 50))
-        res = _ddb().query(IndexName="GSI1", KeyConditionExpression=Key("GSI1PK").eq(f"USER#{ctx.sub}"), ScanIndexForward=False, Limit=limit)
-        items = [{"meetingId": m.get("meetingId"), "title": m.get("title"), "date": (m.get("createdAt") or "")[:10], "status": m.get("status"), "durationMin": int(float(m.get("durationSec") or 0) // 60)} for m in res.get("Items", []) if m.get("SK") == "META" and m.get("status") == "COMPLETED"]
+        items = scoped_list(ctx, "meeting", limit)
         return _text({"meetings": items})
 
     @tool("get_transcript_window", "Verbatim transcript lines (speaker, time, text) of one meeting between startSec and endSec (max 10 minutes). Adds an evidence entry [E#].", {"meetingId": str, "startSec": int, "endSec": int})
@@ -276,7 +325,7 @@ def build_server(ctx: TurnContext):
     @tool("list_lectures", "List this user's analyzed lectures (newest first): lectureId, title, course, date, pageCount. Use it when the user refers to a lecture or class without naming it.", {"limit": int})
     async def list_lectures(args: dict) -> dict:
         limit = max(1, min(int(args.get("limit") or 20), 50))
-        return _text({"lectures": _completed_lectures(ctx.sub, limit=limit)})
+        return _text({"lectures": scoped_list(ctx, "lecture", limit)})
 
     @tool("get_lecture", "One lecture the user owns. Without page: outline (audience level, overview, objectives, review plan, page titles). With page: that section's slide and speech summaries, explanation, concepts, math notes with steps, review questions and flashcards. Adds one evidence entry [E#].", {"lectureId": str, "page": int})
     async def get_lecture(args: dict) -> dict:
@@ -300,6 +349,8 @@ def build_server(ctx: TurnContext):
 
     @tool("memory_facts", "Long-term facts remembered about this user's past meetings (people, roles, projects, decisions). Use for context, not as the only evidence.", {"query": str})
     async def memory_facts(args: dict) -> dict:
+        if ctx.source_type == "lecture" or ctx.lecture_id:
+            return _text({"facts": []})
         return _text({"facts": memory.user_facts(ctx.sub, str(args["query"]))})
 
     @tool("ask_user", "Ask the user a clarifying question when their request is too broad or ambiguous to answer well. kind: 'meeting' when the user must pick a meeting, 'lecture' when they must pick a lecture (options are then filled from their real list, ignore yours), otherwise 'topic' or 'period' with 2 to 4 short options of your own. After calling this, reply with only the returned question and options, then stop.", {"question": str, "kind": str, "options": list})
@@ -310,11 +361,11 @@ def build_server(ctx: TurnContext):
             return _text({"error": "question required"})
         if kind == "meeting":
             # Never let the model invent meeting names: choices come from the user's finished meetings, newest first.
-            options = [f"{m['title']} ({m['date']})" for m in _completed_meetings(ctx.sub, limit=4)]
+            options = [f"{m['title']} ({m['date']})" for m in scoped_list(ctx, "meeting", 4)]
             if not options:
                 return _text({"error": "no finished meetings", "instruction": "Tell the user no analyzed meeting exists yet."})
         elif kind == "lecture":
-            options = [f"{m['title']} ({m['date']})" for m in _completed_lectures(ctx.sub, limit=4)]
+            options = [f"{m['title']} ({m['date']})" for m in scoped_list(ctx, "lecture", 4)]
             if not options:
                 return _text({"error": "no finished lectures", "instruction": "Tell the user no analyzed lecture exists yet."})
         else:

@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { LectureResultResponse } from "@meeting-notes/shared";
 
-const api = vi.hoisted(() => ({ lectureResult: vi.fn(), retryLecture: vi.fn(), startLecture: vi.fn(), deleteLecture: vi.fn() }));
+const api = vi.hoisted(() => ({ lectureResult: vi.fn(), retryLecture: vi.fn(), startLecture: vi.fn(), deleteLecture: vi.fn(), createChatSession: vi.fn() }));
 vi.mock("../api", () => ({ useApi: () => api }));
 import { LecturePage } from "../../pages/LecturePage";
 
@@ -28,6 +28,29 @@ beforeEach(async () => {
 });
 afterEach(async () => { await act(async () => root.unmount()); element.remove(); client.clear(); });
 function button(text: string) { return [...element.querySelectorAll("button")].find((b) => b.textContent?.includes(text))!; }
+
+it("shows only selected source pages and switches images inside a learning group", async () => {
+  const result = fixture();
+  Object.assign(result.document!, { grouped: true, selectedPages: [38, 39], originalPageCount: 73 });
+  Object.assign(result.document!.pages[0]!, { source: "deck", deckPage: 38, sourcePages: [38, 39] });
+  result.pageImages = [{ page: 1, sourcePage: 38, url: "https://example.org/38.png" }, { page: 1, sourcePage: 39, url: "https://example.org/39.png" }];
+  api.lectureResult.mockResolvedValue(result);
+  await act(async () => { client.setQueryData(["lecture", "test"], result); await new Promise((resolve) => setTimeout(resolve, 10)); });
+  expect(element.textContent).toContain("분석 범위: 38–39페이지");
+  expect(element.textContent).toContain("학습 묶음 1개");
+  await act(async () => button("주제별 학습").click());
+  expect(element.querySelector("img")?.getAttribute("src")).toBe("https://example.org/38.png");
+  await act(async () => button("39페이지").click());
+  expect(element.querySelector("img")?.getAttribute("src")).toBe("https://example.org/39.png");
+  expect(element.querySelectorAll('select[aria-label="장표 선택"] option')).toHaveLength(1);
+});
+
+it("opens chat with the current lecture as its fixed scope", async () => {
+  api.createChatSession.mockRejectedValue(new Error("Temporary failure"));
+  await act(async () => { button("이 강의에 질문하기").click(); await new Promise((resolve) => setTimeout(resolve, 20)); });
+  expect(api.createChatSession).toHaveBeenCalledWith({ sourceType: "lecture", lectureId: "test" });
+  expect(element.textContent).toContain("Temporary failure");
+});
 
 it("shows study exports, unmatched speech and search failures without fabricated content", async () => {
   expect(element.textContent).toContain("경사 하강법의 원리");

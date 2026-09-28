@@ -27,6 +27,7 @@ export async function createLecture(caller: Caller, input: z.output<typeof creat
     const rec: LectureRecord = { ...lectureKeys.record(id), SK: "META", GSI1PK: lectureKeys.user(caller.sub), GSI1SK: now,
       lectureId: id, owner: caller.sub, title: input.title, course: input.course, outputLanguage: input.outputLanguage, languageHint: input.languageHint,
       ...(input.customPrompt ? { customPrompt: input.customPrompt } : {}),
+      ...(input.slideRange ? { slideRange: input.slideRange } : {}),
       status: "UPLOAD_PENDING", stages: {}, createdAt: now, updatedAt: now,
       assets: { [mediaKind]: { ...mediaInput, key: mediaKey, uploadId: media.uploadId, complete: false }, ...(slides && input.slides ? { slides: { ...input.slides, key: slidesKey, uploadId: slides.uploadId, complete: false } } : {}) },
     };
@@ -98,7 +99,9 @@ export async function lectureResult(caller: Caller, id: string): Promise<Lecture
     rec.assets.slides?.complete ? presignDownload(rec.assets.slides.key) : null,
     rec.documentKey ? presignDownload(rec.markdownKey ?? `${prefix}study.md`) : null,
     rec.documentKey ? presignDownload(rec.flashcardsKey ?? `${prefix}flashcards.csv`) : null,
-    Promise.all(Array.from({ length: rec.documentKey && (rec.assets.video || rec.assets.slides) ? Math.min(rec.pageCount ?? 0, LECTURE_LIMITS.maxResultPages) : 0 }, async (_, i) => ({ page: i + 1, url: await presignDownload(`${prefix}slides/${i + 1}.png`) }))),
+    rec.studyImages && rec.documentKey
+      ? Promise.all(rec.studyImages.map(async (image) => ({ page: image.page, sourcePage: image.sourcePage, url: await presignDownload(image.key) })))
+      : Promise.all(Array.from({ length: rec.documentKey && (rec.assets.video || rec.assets.slides) ? Math.min(rec.pageCount ?? 0, LECTURE_LIMITS.maxResultPages) : 0 }, async (_, i) => ({ page: i + 1, url: await presignDownload(`${prefix}slides/${i + 1}.png`) }))),
     rec.documentKey ? presignDownload(rec.documentKey) : null,
     rec.assets.video?.complete ? presignDownload(rec.assets.video.key) : null,
     rec.transcriptKey ? presignDownload(rec.transcriptKey) : null,

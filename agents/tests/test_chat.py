@@ -52,7 +52,7 @@ def test_stream_delta_mapping_and_tool_titles():
     assert _delta_event({"type": "content_block_delta", "delta": {"type": "text_delta", "text": "안"}}) == {"type": "text", "delta": "안"}
     assert _delta_event({"type": "content_block_delta", "delta": {"type": "thinking_delta", "thinking": "..."}}) == {"type": "thinking", "delta": "..."}
     assert _delta_event({"type": "content_block_start"}) is None
-    assert tool_title("mcp__meeting__search_meetings", {"query": "타임아웃"}) == "회의록 검색: 타임아웃"
+    assert tool_title("mcp__meeting__search_meetings", {"query": "타임아웃"}) == "자료 검색: 타임아웃"
 
 
 def test_speaker_namer_uses_selected_ids_and_honors_manual_names():

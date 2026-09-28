@@ -49,7 +49,8 @@ def test_study_cache_is_versioned_with_the_prompt(tmp_path):
     store.values[store.prefix + "cache/study-1.json"] = {**FakeModel.STUDY, "searchQueries": []}  # written by an older prompt version
     run(store, model, tmp_path)
     assert model.calls.count(Study) == 1
-    assert store.values[store.prefix + f"cache/study-1.{STUDY_CACHE_VERSION}.json"]["mathNotes"] == Study.model_validate({**FakeModel.STUDY, "searchQueries": []}).model_dump()["mathNotes"]
+    current = next(v for k, v in store.values.items() if "grouped-" in k and k.endswith(f"-study-0.{STUDY_CACHE_VERSION}.json"))
+    assert current["mathNotes"] == Study.model_validate({**FakeModel.STUDY, "searchQueries": []}).model_dump()["mathNotes"]
     model = FakeModel()
     run(store, model, tmp_path)
     assert model.calls.count(Study) == 0  # the entry for the current prompt version is reused
@@ -112,7 +113,7 @@ def test_results_are_written_under_the_run_and_returned_as_keys(tmp_path):
     assert result["documentKey"] == store.prefix + "runs/run-1/document.json"
     assert result["markdownKey"] == store.prefix + "runs/run-1/study.md"
     assert result["flashcardsKey"] == store.prefix + "runs/run-1/flashcards.csv"
-    assert set(store.files) >= {"runs/run-1/study.md", "runs/run-1/flashcards.csv", "slides/1.png"}
+    assert set(store.files) >= {"runs/run-1/study.md", "runs/run-1/flashcards.csv", "runs/run-1/source-slides/1.png"}
     assert "study.md" not in store.files and store.prefix + "document.json" not in store.values  # nothing is overwritten in place
 
 

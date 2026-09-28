@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
-import type { LectureDocument, LecturePage } from "@meeting-notes/shared";
+import { formatSlidePages, type LectureDocument, type LecturePage } from "@meeting-notes/shared";
 import { MathText } from "./MathText";
 import { LectureMathNotes } from "./LectureMathNotes";
 import { Button, InlineError } from "./ui";
@@ -12,6 +12,7 @@ export function LecturePrint({ document: doc }: { document: LectureDocument }) {
     <h1>{doc.title}</h1>
     <p>{doc.course} · {doc.generatedAt.slice(0, 10)} · {hms(doc.durationSec)}</p>
     {doc.customPrompt && <><h2>추가 요청</h2><p className="whitespace-pre-wrap">{doc.customPrompt}</p></>}
+    {doc.selectedPages && <p>분석 범위: {formatSlidePages(doc.selectedPages)}페이지 · 학습 묶음 {doc.pages.length}개</p>}
     <h2>전체 정리</h2><Text text={doc.overview} />
     {doc.audience && <><h2>이 강의의 대상</h2><Text text={doc.audience.level} /><List items={doc.audience.priorKnowledge} /><Text text={doc.audience.lectureGoal} /></>}
     <h2>학습 목표</h2><List items={doc.learningObjectives} />
@@ -44,7 +45,7 @@ function List({ items, ordered }: { items: string[]; ordered?: boolean }) {
 function Source({ page }: { page: LecturePage }) {
   const ranges = page.audioRanges ?? page.videoRanges ?? [];
   return <>
-    {page.sourceFile && <p>원본: {page.sourceFile}{page.source !== "audio" && page.source !== "video" ? ` · ${page.deckPage ?? page.page}페이지` : ""}</p>}
+    {page.sourceFile && <p>원본: {page.sourceFile}{page.source !== "audio" && page.source !== "video" ? ` · ${page.sourcePages ? formatSlidePages(page.sourcePages) : page.deckPage ?? page.page}페이지` : ""}</p>}
     {!!page.relatedPages?.length && <p>관련 원본 장표: {page.relatedPages.map((r) => `${r.page}페이지 ${r.topic}`).join(", ")}</p>}
     {!!ranges.length && <p>{page.source === "audio" ? "음성" : "영상"} 구간: {ranges.map((r) => `${hms(r.startSec)}–${hms(r.endSec)}`).join(", ")}</p>}
   </>;

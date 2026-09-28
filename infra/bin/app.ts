@@ -52,6 +52,7 @@ const api = new ApiStack(app, `${prefix}-Api`, {
   config,
   dataBucket: data.dataBucket,
   table: data.table,
+  lectureTable: lecture.table,
   issuerUrl: auth.issuerUrl,
   userPoolClientId: auth.userPoolClient.userPoolClientId,
   stateMachineArn: pipeline.stateMachine.stateMachineArn,

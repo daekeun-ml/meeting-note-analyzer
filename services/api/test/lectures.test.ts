@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { completeLectureUploadSchema, createLectureSchema, lectureKeys, parseUploadKey, SLIDE_TYPES, type LectureRecord } from "@meeting-notes/shared";
+import { completeLectureUploadSchema, createLectureSchema, lectureKeys, parseUploadKey, parseSlideRange, SLIDE_TYPES, type LectureRecord } from "@meeting-notes/shared";
 
 const mocks = vi.hoisted(() => ({ claim: vi.fn(), release: vi.fn(), get: vi.fn(), list: vi.fn(), ddb: vi.fn(), s3: vi.fn(), start: vi.fn(), sign: vi.fn(), read: vi.fn(), multipart: vi.fn(), complete: vi.fn(), abort: vi.fn(), deletePrefix: vi.fn() }));
 vi.mock("@meeting-notes/backend", async (importOriginal) => ({
@@ -20,6 +20,16 @@ const fixture = (): LectureRecord => ({ PK: "MEETING#test", SK: "META", GSI1PK: 
 beforeEach(() => { vi.resetAllMocks(); mocks.get.mockResolvedValue(fixture()); mocks.ddb.mockResolvedValue({}); mocks.claim.mockResolvedValue(undefined); mocks.release.mockResolvedValue(undefined); mocks.start.mockResolvedValue({ executionArn: "execution" }); });
 
 describe("lecture inputs", () => {
+  it("validates a separate optional page range and requires an attached deck", () => {
+    const input = { title: "Class", audio: { fileName: "a.mp3", contentType: "audio/mpeg", fileSize: 100 },
+      slides: { fileName: "s.pdf", contentType: SLIDE_TYPES.pdf, fileSize: 100 } };
+    expect(createLectureSchema.parse({ ...input, slideRange: " 38–47 " }).slideRange).toBe("38–47");
+    expect(parseSlideRange("3-5, 9, 4")).toEqual([3, 4, 5, 9]);
+    for (const slideRange of ["0-3", "9-2", "119-121", "1-4 junk"]) {
+      expect(createLectureSchema.safeParse({ ...input, slideRange }).success).toBe(false);
+    }
+    expect(createLectureSchema.safeParse({ ...input, slides: undefined, slideRange: "1-4" }).success).toBe(false);
+  });
   it("accepts omitted or blank custom requests and trims and bounds optional text", () => {
     const input = { title: "Class", audio: { fileName: "a.mp3", contentType: "audio/mpeg", fileSize: 100 } };
     expect(createLectureSchema.parse(input).customPrompt).toBe("");
@@ -55,6 +65,17 @@ describe("lecture inputs", () => {
     expect(() => validateParts(20 * 1024 * 1024, [{ partNumber: 2, etag: "y" }, { partNumber: 1, etag: "x" }])).not.toThrow();
     expect(completeLectureUploadSchema.safeParse({ asset: "script" }).success).toBe(false);
   });
+});
+
+it("signs only the source images belonging to the published learning groups", async () => {
+  mocks.sign.mockImplementation(async (key: string) => `signed:${key}`);
+  mocks.get.mockResolvedValue({ ...fixture(), status: "COMPLETED", pageCount: 1, documentKey: "lecture-results/test/runs/current/document.json",
+    studyImages: [{ page: 1, sourcePage: 38, key: "lecture-results/test/runs/current/source-slides/38.png" },
+      { page: 1, sourcePage: 39, key: "lecture-results/test/runs/current/source-slides/39.png" }] });
+  const result = await lectureResult(caller, "test");
+  expect(result.pageImages.map((i) => i.sourcePage)).toEqual([38, 39]);
+  expect(result.pageImages.every((i) => i.page === 1 && i.url.includes("/runs/current/"))).toBe(true);
+  expect(result.lecture).not.toHaveProperty("studyImages");
 });
 
 it("persists an optional study request in the owned lecture and returns it on result reads", async () => {

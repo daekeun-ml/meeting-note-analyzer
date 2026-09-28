@@ -15,6 +15,7 @@ export interface ApiStackProps extends StackProps {
   config: ProjectConfig;
   dataBucket: s3.IBucket;
   table: ddb.ITable;
+  lectureTable: ddb.ITable;
   issuerUrl: string;
   userPoolClientId: string;
   stateMachineArn: string;
@@ -42,6 +43,7 @@ export class ApiStack extends Stack {
       environment: {
         UPLOAD_BASE_URL: config.siteUrl,
         TABLE_NAME: table.tableName,
+        LECTURE_TABLE_NAME: props.lectureTable.tableName,
         DATA_BUCKET: dataBucket.bucketName,
         VAPID_SECRET_NAME: config.vapidSecretName,
         STATE_MACHINE_ARN: props.stateMachineArn,
@@ -50,6 +52,7 @@ export class ApiStack extends Stack {
       },
     });
     table.grantReadWriteData(apiFn);
+    props.lectureTable.grantReadData(apiFn);
     dataBucket.grantReadWrite(apiFn);
     dataBucket.grantDelete(apiFn);
     vapidSecret.grantRead(apiFn);

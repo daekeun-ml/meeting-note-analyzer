@@ -4,6 +4,29 @@ import type { UploadPartTarget } from "./meeting.js";
 
 export const LECTURE_LIMITS = { maxVideoBytes: 4 * 1024 ** 3, maxAudioBytes: CONSTRAINTS.maxUploadBytes, maxSlidesBytes: 100 * 1024 * 1024, maxPages: 120, maxVideoScenes: 240, maxResultPages: 360, maxActive: 3, uploadExpirySec: 4 * 3600, maxCustomPromptChars: 2000 } as const;
 export const SLIDE_TYPES = { pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation", pdf: "application/pdf" } as const;
+export function parseSlideRange(text: string): number[] {
+  const pages = new Set<number>();
+  for (const part of text.trim().split(/[,，]/)) {
+    const match = /^\s*(\d+)\s*(?:[-–—~～]\s*(\d+)\s*)?$/.exec(part);
+    if (!match) throw new Error("분석할 페이지는 38-47 또는 3-8, 12처럼 입력하세요");
+    const start = Number(match[1]); const end = Number(match[2] ?? match[1]);
+    if (start < 1 || end < start || end > LECTURE_LIMITS.maxPages) throw new Error("페이지는 1–120 범위에서 입력하세요");
+    for (let page = start; page <= end; page++) pages.add(page);
+  }
+  return [...pages].sort((a, b) => a - b);
+}
+export function formatSlidePages(pages: number[]): string {
+  const ranges: string[] = [];
+  for (let i = 0; i < pages.length; i++) {
+    const start = pages[i]!; let end = start;
+    while (pages[i + 1] === end + 1) { end++; i++; }
+    ranges.push(start === end ? String(start) : `${start}–${end}`);
+  }
+  return ranges.join(", ");
+}
+const slideRangeSchema = z.string().trim().max(200).default("").superRefine((value, ctx) => {
+  if (value) { try { parseSlideRange(value); } catch (error) { ctx.addIssue({ code: "custom", message: (error as Error).message }); } }
+});
 export const LECTURE_STAGES = ["video", "stt", "slides", "alignment", "study", "papers"] as const;
 export type LectureStage = (typeof LECTURE_STAGES)[number];
 export const LECTURE_STAGE_LABELS: Record<LectureStage, string> = { video: "영상 화면·음성 추출", stt: "음성 전사", slides: "화면·장표 읽기", alignment: "영상 구간 연결", study: "학습 자료", papers: "참고 논문" };
@@ -13,6 +36,7 @@ export const createLectureSchema = z.object({
   title: z.string().trim().min(1).max(200),
   course: z.string().trim().max(120).default(""),
   customPrompt: z.string().trim().max(LECTURE_LIMITS.maxCustomPromptChars, "추가 요청은 2,000자 이하로 입력하세요").default(""),
+  slideRange: slideRangeSchema,
   outputLanguage: z.enum(OUTPUT_LANGUAGES).default("ko"),
   languageHint: z.enum(["ko", "en", "ja", "zh", "auto"]).default("auto"),
   video: file.extend({ fileSize: z.number().int().positive().max(LECTURE_LIMITS.maxVideoBytes), contentType: z.literal("video/mp4") })
@@ -21,13 +45,18 @@ export const createLectureSchema = z.object({
     .refine((f) => /\.mp3$/i.test(f.fileName), "강의 음성은 MP3여야 합니다").optional(),
   slides: file.extend({ fileSize: z.number().int().positive().max(LECTURE_LIMITS.maxSlidesBytes), contentType: z.enum([SLIDE_TYPES.pptx, SLIDE_TYPES.pdf]) })
     .refine((f) => f.fileName.toLowerCase().endsWith(f.contentType === SLIDE_TYPES.pdf ? ".pdf" : ".pptx"), "장표는 PPTX 또는 PDF여야 합니다").optional(),
-}).refine((input) => !!input.video !== !!input.audio, "MP4 영상 또는 MP3 음성 중 하나를 선택하세요");
+}).refine((input) => !!input.video !== !!input.audio, "MP4 영상 또는 MP3 음성 중 하나를 선택하세요")
+  .refine((input) => !input.slideRange || !!input.slides, "페이지 범위를 지정하려면 장표를 첨부하세요");
 export type CreateLectureRequest = z.input<typeof createLectureSchema>;
 export type LectureAsset = { key: string; uploadId: string; fileName: string; fileSize: number; contentType: string; complete: boolean; etag?: string };
 export interface LectureRecord {
   PK: string; SK: "META"; GSI1PK: string; GSI1SK: string;
   lectureId: string; owner: string; title: string; course: string;
   customPrompt?: string;
+  slideRange?: string;
+  selectedPages?: number[];
+  originalPageCount?: number;
+  studyImages?: { page: number; sourcePage: number; key: string }[];
   status: "UPLOAD_PENDING" | "UPLOADED" | "PREPARING" | "TRANSCRIBING" | "ANALYZING" | "COMPLETED" | "FAILED";
   outputLanguage: OutputLanguage; languageHint: string;
   assets: { video?: LectureAsset; audio?: LectureAsset; slides?: LectureAsset };
@@ -38,7 +67,7 @@ export interface LectureRecord {
   transcriptKey?: string; documentKey?: string; markdownKey?: string; flashcardsKey?: string; pageCount?: number; durationSec?: number; researchFailures?: number;
   error?: string; createdAt: string; updatedAt: string; completedAt?: string;
 }
-export type LectureDto = Omit<LectureRecord, "PK" | "SK" | "GSI1PK" | "GSI1SK" | "assets" | "analysisClaim" | "prepareClaim" | "preparedAudioKey" | "videoManifestKey" | "runId" | "executionArn" | "transcriptKey" | "documentKey" | "markdownKey" | "flashcardsKey"> & {
+export type LectureDto = Omit<LectureRecord, "PK" | "SK" | "GSI1PK" | "GSI1SK" | "assets" | "analysisClaim" | "prepareClaim" | "preparedAudioKey" | "videoManifestKey" | "runId" | "executionArn" | "transcriptKey" | "documentKey" | "markdownKey" | "flashcardsKey" | "studyImages"> & {
   videoName?: string; audioName?: string; slidesName?: string; uploadsComplete: boolean;
 };
 export function lectureUploadsComplete(rec: Pick<LectureRecord, "assets">): boolean {
@@ -46,7 +75,7 @@ export function lectureUploadsComplete(rec: Pick<LectureRecord, "assets">): bool
   return !!rec.assets.audio?.complete && (!rec.assets.slides || rec.assets.slides.complete);
 }
 export function toLectureDto(rec: LectureRecord): LectureDto {
-  const { PK, SK, GSI1PK, GSI1SK, assets, analysisClaim, prepareClaim, preparedAudioKey, videoManifestKey, runId, executionArn, transcriptKey, documentKey, markdownKey, flashcardsKey, ...dto } = rec;
+  const { PK, SK, GSI1PK, GSI1SK, assets, analysisClaim, prepareClaim, preparedAudioKey, videoManifestKey, runId, executionArn, transcriptKey, documentKey, markdownKey, flashcardsKey, studyImages, ...dto } = rec;
   return { ...dto, videoName: assets.video?.fileName, audioName: assets.audio?.fileName, slidesName: assets.slides?.fileName, uploadsComplete: lectureUploadsComplete(rec) };
 }
 export interface LectureUploadPlan { uploadId: string; partSize: number; parts: UploadPartTarget[]; expiresAt: string }
@@ -69,6 +98,9 @@ export interface LectureAudience { level: string; priorKnowledge: string[]; lect
 export interface LecturePage {
   page: number; title: string; slideText: string; imageKey: string;
   source?: "deck" | "video" | "audio"; deckPage?: number; sourceFile?: string;
+  sourcePages?: number[];
+  sourceImages?: { page: number; imageKey: string }[];
+  depth?: "brief" | "standard" | "detailed";
   relatedPages?: { page: number; topic: string }[];
   audioRanges?: { startSec: number; endSec: number }[];
   /** Video topic pages carry the outline chapter they belong to; pages of one chapter share their paper research. */
@@ -88,6 +120,10 @@ export interface LecturePage {
 export interface LectureDocument {
   version: 1; lectureId: string; title: string; course: string; generatedAt: string; outputLanguage: string;
   customPrompt?: string;
+  slideRange?: string;
+  grouped?: boolean;
+  selectedPages?: number[];
+  originalPageCount?: number;
   overview: string; learningObjectives: string[]; reviewPlan: string[]; durationSec: number;
   audience?: LectureAudience | null;
   pages: LecturePage[]; warnings: string[];
@@ -98,7 +134,7 @@ export interface LectureDocument {
 export interface LectureResultResponse {
   lecture: LectureDto; document: LectureDocument | null; audioUrl: string | null; videoUrl?: string | null; slidesUrl: string | null;
   transcriptUrl?: string | null;
-  markdownUrl: string | null; flashcardsUrl: string | null; pageImages: { page: number; url: string }[];
+  markdownUrl: string | null; flashcardsUrl: string | null; pageImages: { page: number; sourcePage?: number; url: string }[];
 }
 /** HTTP API response: large study documents bypass Lambda/API Gateway payload limits. */
 export type LectureResultLinks = Omit<LectureResultResponse, "document"> & { documentUrl: string | null };

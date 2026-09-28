@@ -91,7 +91,7 @@ export function createApi(base: string, getToken: () => string | undefined, rene
     unsubscribePush: (endpoint: string) => call<void>("DELETE", "/push/subscription", { endpoint }),
     vapidPublicKey: () => call<{ publicKey: string }>("GET", "/push/vapid-public-key"),
     listChatSessions: () => call<{ items: ChatSessionDto[] }>("GET", "/chat/sessions"),
-    createChatSession: (meetingId?: string) => call<{ session: ChatSessionDto }>("POST", "/chat/sessions", meetingId ? { meetingId } : {}),
+    createChatSession: (scope?: string | import("@meeting-notes/shared").CreateChatSessionRequest) => call<{ session: ChatSessionDto }>("POST", "/chat/sessions", typeof scope === "string" ? { meetingId: scope } : scope ?? {}),
     getChatMessages: (id: string) => call<{ session: ChatSessionDto; items: ChatMessageDto[] }>("GET", `/chat/sessions/${encodeURIComponent(id)}/messages`),
     deleteChatSession: (id: string) => call<void>("DELETE", `/chat/sessions/${encodeURIComponent(id)}`),
   };

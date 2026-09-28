@@ -9,6 +9,7 @@ from lecture_study.pipeline import analyze
 from lecture_study.prompts import STUDY_CACHE_VERSION
 from lecture_study.schemas import Alignment, Audience, Overview, Papers, SlideReading, Study, VideoOutline
 from lecture_study.study import generate_study
+from lecture_study.deck_scope import DeckPlan, DeckScope
 from test_pipeline import FakeModel, FakeSearch, FakeStore
 
 
@@ -34,7 +35,7 @@ def test_absent_or_whitespace_request_keeps_default_inputs_and_existing_caches(t
     run(store, model, tmp_path)
     calls = list(model.calls)
     assert all("customPrompt" not in data for _, data in model.inputs)
-    assert store.prefix + f"cache/study-1.{STUDY_CACHE_VERSION}.json" in store.values
+    assert any("grouped-" in k and k.endswith(f"-study-0.{STUDY_CACHE_VERSION}.json") for k in store.values)
     store.rec["customPrompt"] = " \n "
     run(store, model, tmp_path)
     assert model.calls == calls
@@ -51,14 +52,16 @@ def test_request_reaches_studies_paper_selection_and_overview_but_not_source_int
         if schema in (SlideReading, Alignment, Audience):
             assert "customPrompt" not in data
     studies = [data for schema, data in model.inputs if schema == Study]
-    assert {s["requestScope"]["deckPage"] for s in studies} == {1, 2}
+    assert [s["requestScope"]["deckPages"] for s in studies] == [[2]]
     assert all(s["requestScope"]["sourceType"] == "deck" for s in studies)
     overview = next(data for schema, data in model.inputs if schema == Overview)
-    assert overview["requestScope"]["availableDeckPages"] == [1, 2]
-    assert [p["deckPage"] for p in overview["pages"]] == [1, 2]
+    assert overview["requestScope"]["availableDeckPages"] == [2]
+    assert [p["deckPage"] for p in overview["pages"]] == [2]
     document = store.values[store.prefix + "runs/run-1/document.json"]
     assert document["customPrompt"] == store.rec["customPrompt"].strip()
-    assert len(document["pages"]) == 2  # Emphasis does not drop the other source pages.
+    assert len(document["pages"]) == 1
+    assert document["selectedPages"] == [2]  # Even "focus on" is now a hard selection.
+    assert [data["page"] for schema, data in model.inputs if schema == SlideReading] == [2]
 
 
 def test_changed_request_regenerates_only_dependent_study_research_and_overview(tmp_path):
@@ -69,7 +72,9 @@ def test_changed_request_regenerates_only_dependent_study_research_and_overview(
         store.rec["customPrompt"] = prompt
         offset = len(model.calls)
         run(store, model, tmp_path)
-        assert sorted(schema.__name__ for schema in model.calls[offset:]) == ["Overview", "Papers", "Papers", "Study", "Study"]
+        calls = model.calls[offset:]
+        assert calls.count(Study) == 1 and calls.count(Papers) == 1
+        assert DeckScope in calls and DeckPlan in calls and SlideReading not in calls
         assert store.values["transcript"] == original
         offset = len(model.calls)
         run(store, model, tmp_path)
@@ -92,13 +97,12 @@ def test_audio_only_requests_do_not_gain_a_fictional_slide_page(tmp_path):
     assert next(data for schema, data in model.inputs if schema == Overview)["requestScope"]["availableDeckPages"] == []
 
 
-def test_video_deck_and_topic_requests_use_physical_deck_pages_and_actual_time_ranges(tmp_path):
-    from test_video_pipeline import Model
+def test_video_with_selected_deck_uses_only_selected_physical_pages(tmp_path):
     frame = tmp_path / "frame.jpg"
     Image.new("RGB", (64, 36)).save(frame)
     store = deck_store(tmp_path)
     store.rec["assets"]["video"] = {"key": "video.mp4"}
-    store.rec["customPrompt"] = "첨부 슬라이드의 38–48페이지 위주로 보기"
+    store.rec["customPrompt"] = "첨부 슬라이드의 2페이지 위주로 보기"
     store.rec["videoManifestKey"] = "manifest"
     store.values["manifest"] = {"durationSec": 90, "sampleIntervalSec": 2, "sampledFrames": 6,
         "groupedScenes": False, "hasAudio": True, "scenes": [
@@ -108,7 +112,7 @@ def test_video_deck_and_topic_requests_use_physical_deck_pages_and_actual_time_r
     download = store.download_file
     store.download_file = lambda bucket, key, dest: download(bucket, str(frame) if "/video/frames/" in key else key, dest)
     scopes = []
-    class Inspect(Model):
+    class Inspect(FakeModel):
         def generate(self, schema, task, data, **kwargs):
             if schema == Study:
                 assert data["customPrompt"] == store.rec["customPrompt"]
@@ -117,9 +121,10 @@ def test_video_deck_and_topic_requests_use_physical_deck_pages_and_actual_time_r
             return super().generate(schema, task, data, **kwargs)
     model = Inspect()
     run(store, model, tmp_path)
-    assert [s["deckPage"] for s in scopes if s["sourceType"] == "deck"] == [1, 2]
-    assert [s for s in scopes if s["sourceType"] == "video"] == [
-        {"sourceType": "video", "videoRanges": [{"startSec": 30, "endSec": 90}]}]
+    assert [s["deckPages"] for s in scopes] == [[2]]
+    document = store.values[store.prefix + "runs/run-1/document.json"]
+    assert document["selectedPages"] == [2] and len(document["pages"]) == 1
+    assert document["pages"][0]["alignment"]["method"] == "semantic"
     calls = list(model.calls)
     run(store, model, tmp_path)
     assert model.calls == calls

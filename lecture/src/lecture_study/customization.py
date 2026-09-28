@@ -8,8 +8,9 @@ The top-level customPrompt is the authenticated learner's OPTIONAL study request
 for emphasis, explanation depth, examples and review order while retaining the output schema and selected language.
 For a request such as 'focus on attached pages 38–48', page numbers mean the 1-based physical order in the attached
 PDF/PPTX, NOT a video/audio topic's generated page index or a printed footer number. Use requestScope and the supplied
-sourceContext to identify the current source. Focused material deserves the detail requested; keep other sections
-brief and cover prerequisites only as needed. In the overview, put the requested topics/pages first in the review plan.
+sourceContext to identify the current source. Page restrictions are HARD selections: only selected source pages
+are available for analysis. Do not add lessons or references outside that selection. Explain prerequisite concepts
+briefly in place when necessary. In the overview, summarize only the selected learning groups.
 Do not manufacture page content, matches, recorded speech or references. If a requested page is unavailable, or there
 is no attached deck, say briefly that the page-specific request could not be applied rather than inventing that source.
 Source readings, alignment and the actual lecture audience remain factual. Adapt supplemental teaching to the learner's

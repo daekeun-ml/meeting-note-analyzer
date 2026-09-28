@@ -5,9 +5,20 @@ import re
 DIFFICULTY = {"basic": "기본", "understand": "이해", "apply": "적용"}
 NOTE_KIND = {"definition": "정의", "theorem": "정리", "lemma": "보조정리", "formula": "공식", "example": "예제"}
 
+def page_label(pages):
+    ranges = []
+    for page in pages:
+        if ranges and ranges[-1][-1] + 1 == page:
+            ranges[-1].append(page)
+        else:
+            ranges.append([page])
+    return ", ".join(str(r[0]) if len(r) == 1 else f"{r[0]}–{r[-1]}" for r in ranges)
+
 
 def markdown(document: dict) -> str:
     lines = [f"# {document['title']}", "", document["overview"]]
+    if document.get("selectedPages"):
+        lines.extend(["", f"분석 범위: {page_label(document['selectedPages'])}페이지 · 학습 묶음 {len(document['pages'])}개"])
     if document.get("customPrompt"):
         prompt = document["customPrompt"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         prompt = re.sub(r"([\\`*_\[\]#])", r"\\\1", prompt)
@@ -21,7 +32,7 @@ def markdown(document: dict) -> str:
     for page in document["pages"]:
         lines.extend(["", f"## {page['page']}. {page['title']}"])
         if page.get("sourceFile"):
-            lines.append(f"원본: {page['sourceFile']}" + (f" · {page.get('deckPage', page['page'])}페이지" if page.get("source") not in ("video", "audio") else ""))
+            lines.append(f"원본: {page['sourceFile']}" + (f" · {page_label(page['sourcePages']) if page.get('sourcePages') else page.get('deckPage', page['page'])}페이지" if page.get("source") not in ("video", "audio") else ""))
         if page.get("relatedPages"):
             lines.extend(["", "관련 원본 장표: " + ", ".join(f"{ref['page']}페이지 {ref['topic']}" for ref in page["relatedPages"])])
         if page.get("audioRanges"):
@@ -79,5 +90,5 @@ def flashcard_csv(document: dict) -> str:
         return "'" + text if text.lstrip().startswith(("=", "+", "-", "@", "\t", "\r")) else text
     for page in document["pages"]:
         for card in page["flashcards"]:
-            writer.writerow([safe(card["front"]), safe(card["back"]), page["page"], safe(document["title"])])
+            writer.writerow([safe(card["front"]), safe(card["back"]), page_label(page["sourcePages"]) if page.get("sourcePages") else page["page"], safe(document["title"])])
     return "\ufeff" + output.getvalue()
