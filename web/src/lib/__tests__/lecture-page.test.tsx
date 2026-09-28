@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { LectureResultResponse } from "@meeting-notes/shared";
 
-const api = vi.hoisted(() => ({ lectureResult: vi.fn(), retryLecture: vi.fn(), startLecture: vi.fn(), deleteLecture: vi.fn(), createChatSession: vi.fn() }));
+const api = vi.hoisted(() => ({ lectureResult: vi.fn(), retryLecture: vi.fn(), startLecture: vi.fn(), deleteLecture: vi.fn(), createChatSession: vi.fn(), listLectureShares: vi.fn() }));
 vi.mock("../api", () => ({ useApi: () => api }));
 import { LecturePage } from "../../pages/LecturePage";
 
@@ -21,6 +21,7 @@ const fixture = (): LectureResultResponse => ({
 beforeEach(async () => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.resetAllMocks(); api.lectureResult.mockResolvedValue(fixture()); api.retryLecture.mockResolvedValue(undefined);
+  api.listLectureShares.mockResolvedValue({ items: [] });
   element = document.createElement("div"); document.body.appendChild(element); root = createRoot(element);
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(["lecture", "test"], fixture());
@@ -28,6 +29,34 @@ beforeEach(async () => {
 });
 afterEach(async () => { await act(async () => root.unmount()); element.remove(); client.clear(); });
 function button(text: string) { return [...element.querySelectorAll("button")].find((b) => b.textContent?.includes(text))!; }
+
+it("opens guest sharing from the action row without creating an invitation", async () => {
+  const actions = element.querySelector('[role="group"][aria-label="강의 작업"]')!;
+  expect([...actions.querySelectorAll("button")].map((item) => item.textContent)).toEqual([
+    "이 강의에 질문하기", "게스트 공유", "논문 검색 다시 시도", "PDF로 저장",
+  ]);
+  const share = button("게스트 공유");
+  expect(share.textContent).toBe("게스트 공유");
+  expect(share.getAttribute("aria-expanded")).toBe("false");
+  expect(element.querySelector('textarea[aria-label="초대할 이메일"]')).toBeNull();
+  await act(async () => { (share as HTMLButtonElement).click(); await new Promise((resolve) => setTimeout(resolve, 10)); });
+  expect(element.querySelector('textarea[aria-label="초대할 이메일"]')).not.toBeNull();
+  expect(api.listLectureShares).toHaveBeenCalledWith("test");
+  await act(async () => button("닫기").click());
+  expect(element.querySelector("#lecture-sharing")).toBeNull();
+});
+
+it("opens a sharing link directly, including while a published lecture is being regenerated", async () => {
+  const result = fixture();
+  result.lecture.status = "ANALYZING";
+  api.lectureResult.mockResolvedValue(result); client.setQueryData(["lecture", "test"], result);
+  await act(async () => root.unmount()); element.remove();
+  element = document.createElement("div"); document.body.appendChild(element); root = createRoot(element);
+  await act(async () => root.render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/lectures/test?share=1&page=1"]}><Routes><Route path="/lectures/:id" element={<LecturePage />} /></Routes></MemoryRouter></QueryClientProvider>));
+  expect(button("게스트 공유").getAttribute("aria-expanded")).toBe("true");
+  expect(element.querySelector('textarea[aria-label="초대할 이메일"]')).not.toBeNull();
+  expect(element.textContent).toContain("수식과 정리");
+});
 
 it("shows only selected source pages and switches images inside a learning group", async () => {
   const result = fixture();

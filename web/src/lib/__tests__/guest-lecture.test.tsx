@@ -52,8 +52,15 @@ it("opens the guest email-code flow without an owner login or password", async (
   expect(element.querySelector('input[type="password"]')).toBeNull();
   expect(element.textContent).toContain("초대된 이메일");
   await input("게스트 이메일", "guest@example.com"); await submit();
-  expect(element.textContent).toContain("6자리");
-  await input("인증 코드", "012345"); await submit();
+  const field = element.querySelector('input[aria-label="인증 코드"]') as HTMLInputElement;
+  expect(field.maxLength).toBe(8);
+  await input("인증 코드", "01234567");
+  expect(field.value).toBe("01234567");
+  expect(field.checkValidity()).toBe(true);
+  expect(element.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
+  await submit();
+  const verification = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/verify-code"))!;
+  expect(JSON.parse(verification[1].body).code).toBe("01234567");
   expect(element.textContent).toContain("공유된 CTC 강의");
   expect(element.textContent).toContain("38–39페이지");
   expect(fetchMock.mock.calls.every(([url]) => String(url).startsWith("/api/guest/"))).toBe(true);
@@ -63,7 +70,7 @@ it("does not display the lecture after a rejected code", async () => {
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
   rejectCode = true;
   await input("게스트 이메일", "guest@example.com"); await submit();
-  await input("인증 코드", "012345"); await submit();
+  await input("인증 코드", "01234567"); await submit();
   expect(element.textContent).toContain("잘못된 인증 코드");
   expect(element.textContent).not.toContain("공유된 CTC 강의");
 });

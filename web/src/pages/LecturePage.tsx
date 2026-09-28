@@ -18,7 +18,13 @@ import { IconChevronLeft, IconChevronRight, IconExternal, IconRefresh, IconTrash
 type Tab = "overview" | "pages" | "cards" | "transcript";
 export function LecturePage() {
   const { id = "" } = useParams(); const api = useApi(); const nav = useNavigate(); const qc = useQueryClient();
-  const [params] = useSearchParams(); const requestedPage = Number(params.get("page")) || 0; // chat evidence links open one section directly
+  const [params, setParams] = useSearchParams(); const requestedPage = Number(params.get("page")) || 0; // chat evidence links open one section directly
+  const sharingOpen = params.get("share") === "1";
+  function showSharing(open: boolean) {
+    const next = new URLSearchParams(params);
+    if (open) next.set("share", "1"); else next.delete("share");
+    setParams(next, { replace: true });
+  }
   const [tab, setTab] = useState<Tab>(requestedPage ? "pages" : "overview"); const [pageIndex, setPageIndex] = useState(0);
   const [pendingPage, setPendingPage] = useState(requestedPage);
   const player = useRef<AudioPlayerHandle>(null);
@@ -53,20 +59,28 @@ export function LecturePage() {
   if (pendingPage && document) { const index = document.pages.findIndex((p) => p.page === pendingPage); if (index >= 0) setPageIndex(index); setPendingPage(0); }
   const page = document?.pages[pageIndex];
   const active = ["UPLOADED", "PREPARING", "TRANSCRIBING", "ANALYZING"].includes(lecture.status);
-  return <Page title={lecture.title} subtitle={lecture.course || "강의 학습 자료"} back={<Link to="/lectures" className="inline-flex items-center text-sm text-ink-3 mb-3"><IconChevronLeft size={16} />강의 목록</Link>}>
+  return <Page title={lecture.title} subtitle={lecture.course || "강의 학습 자료"}
+    back={<Link to="/lectures" className="inline-flex items-center text-sm text-ink-3 mb-3"><IconChevronLeft size={16} />강의 목록</Link>}>
     <div className="flex items-center justify-between gap-2"><LectureStatus lecture={lecture} /><span className="text-xs text-ink-3">{lecture.pageCount ? `학습 항목 ${lecture.pageCount}개` : lecture.videoName ? "MP4" : lecture.audioName ? "MP3" : lecture.slidesName}{lecture.durationSec ? ` · ${hms(lecture.durationSec)}` : ""}</span></div>
+    {document && <div role="group" aria-label="강의 작업" className="mt-3 flex flex-nowrap items-center gap-2 overflow-x-auto py-1">
+      {lecture.status === "COMPLETED" && <Button size="sm" className="shrink-0" loading={chat.isPending} onClick={() => chat.mutate()}>이 강의에 질문하기</Button>}
+      <Button size="sm" className="shrink-0" variant="violet" aria-expanded={sharingOpen} aria-controls="lecture-sharing" onClick={() => showSharing(!sharingOpen)}>게스트 공유</Button>
+      {lecture.status === "COMPLETED" && <Button size="sm" className="shrink-0" variant="secondary" loading={retry.isPending}
+        onClick={() => { if ((lecture.researchFailures ?? 0) > 0 || confirm("최신 설명 방식으로 학습 자료를 다시 만들까요? 기존 전사와 장표 분석은 재사용하며 AI 분석 비용이 발생할 수 있습니다.")) retry.mutate(); }}>
+        {(lecture.researchFailures ?? 0) > 0 ? "논문 검색 다시 시도" : "학습 설명 업데이트"}
+      </Button>}
+      <LectureExportButton key={document.generatedAt} document={document} compact />
+    </div>}
+    {document && <LectureSharing key={id} lectureId={id} open={sharingOpen} onClose={() => showSharing(false)} />}
     {customPrompt && <details className="mt-3 text-sm"><summary className="cursor-pointer text-ink-3">추가 요청</summary><p className="mt-2 whitespace-pre-wrap leading-relaxed">{customPrompt}</p></details>}
     {document?.selectedPages && <Card className="mt-3 p-4"><p className="text-sm font-semibold">분석 범위: {formatSlidePages(document.selectedPages)}페이지</p>
       <p className="mt-1 text-xs text-ink-3">원본 {document.originalPageCount}장 중 {document.selectedPages.length}장 · 주제별 학습 묶음 {document.pages.length}개</p></Card>}
-    {document && lecture.status === "COMPLETED" && <Button className="mt-3" variant="secondary" loading={chat.isPending} onClick={() => chat.mutate()}>이 강의에 질문하기</Button>}
-    {document && lecture.status === "COMPLETED" && <LectureSharing lectureId={id} />}
     {chat.error && <InlineError>{chat.error.message}</InlineError>}
     {active && <Card className="mt-5 p-4"><p className="text-sm text-ink-2 mb-4">강의 내용을 정리하고 있습니다. 강의 길이와 장표 수에 따라 시간이 걸릴 수 있습니다.</p>{lecture.status === "TRANSCRIBING" && <p className="mb-4 text-xs text-ink-3">초기 준비나 대기 상태에 따라 전사에 시간이 더 걸릴 수 있습니다. 완료되면 자동으로 이어집니다.</p>}<LectureProgress lecture={lecture} /></Card>}
     {lecture.status === "UPLOAD_PENDING" && <Card className="mt-5 p-4"><p className="text-sm text-ink-2">{lecture.uploadsComplete ? "선택한 파일의 업로드가 완료되었습니다." : "파일 업로드가 완료되지 않았습니다. 업로드 화면이 열려 있다면 이어서 진행하세요. 화면을 닫았다면 이 강의를 삭제하고 다시 등록하세요."}</p>{lecture.uploadsComplete && <Button full className="mt-3" loading={start.isPending} onClick={() => start.mutate()}>강의 분석 시작</Button>}</Card>}
     {lecture.status === "UPLOADED" && <Button full variant="secondary" className="mt-3" loading={start.isPending} onClick={() => start.mutate()}>처리 시작 확인</Button>}
     {lecture.status === "FAILED" && <Card className="mt-5 p-4"><p className="font-semibold text-danger">분석을 완료하지 못했습니다</p><p className="mt-2 text-sm text-ink-2">완료된 단계의 자료를 재사용해 이어서 처리할 수 있습니다.</p><details className="mt-3 text-xs text-ink-3"><summary className="cursor-pointer">오류 상세</summary><p className="mt-2 break-all">{lecture.error}</p></details></Card>}
-    {(lecture.status === "FAILED" || (lecture.status === "COMPLETED" && (lecture.researchFailures ?? 0) > 0)) && <Button full className="mt-3" loading={retry.isPending} icon={<IconRefresh size={16} />} onClick={() => retry.mutate()}>{lecture.status === "COMPLETED" ? "논문 검색 다시 시도" : "완료된 작업부터 이어서 처리"}</Button>}
-    {lecture.status === "COMPLETED" && !(lecture.researchFailures ?? 0) && <Button variant="secondary" className="mt-3" loading={retry.isPending} icon={<IconRefresh size={16} />} onClick={() => { if (confirm("최신 설명 방식으로 학습 자료를 다시 만들까요? 기존 전사와 장표 분석은 재사용하며 AI 분석 비용이 발생할 수 있습니다.")) retry.mutate(); }}>학습 설명 업데이트</Button>}
+    {(lecture.status === "FAILED" || (!document && lecture.status === "COMPLETED" && (lecture.researchFailures ?? 0) > 0)) && <Button full className="mt-3" loading={retry.isPending} icon={<IconRefresh size={16} />} onClick={() => retry.mutate()}>{lecture.status === "COMPLETED" ? "논문 검색 다시 시도" : "완료된 작업부터 이어서 처리"}</Button>}
     {(retry.error || start.error || remove.error) && <InlineError>{(retry.error || start.error || remove.error)?.message}</InlineError>}
     {videoUrl && <>
       <div ref={sentinel} aria-hidden className="h-px" />
@@ -77,7 +91,6 @@ export function LecturePage() {
       </div>
     </>}
     {document && <>
-      <LectureExportButton key={document.generatedAt} document={document} />
       {audioUrl && !videoUrl && tab !== "transcript" && <div className="sticky top-0 z-10 -mx-4 px-4 py-3 mt-3 bg-bg/95 backdrop-blur"><AudioPlayer ref={player} src={audioUrl} onError={() => { void query.refetch().then(() => refreshAudio()); }} /></div>}
       <Segmented className="mt-3" value={tab} onChange={setTab} options={[{ value: "overview", label: "전체 정리" }, { value: "pages", label: document.grouped ? "주제별 학습" : document.videoAnalysis || !lecture.slidesName ? "구간별 학습" : "장표별 학습" }, { value: "cards", label: "복습 카드" }, ...(transcriptUrl ? [{ value: "transcript" as const, label: "전사" }] : [])]} />
       {tab === "overview" && <div className="space-y-5 mt-5">

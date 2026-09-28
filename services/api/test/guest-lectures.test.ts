@@ -64,12 +64,14 @@ it("starts only EMAIL_OTP for an invited address and stores no OTP code", async 
   expect(rate.UpdateExpression).toContain("#ttl = :ttl");
 });
 
-it("verifies the email claim and returns an HttpOnly cookie rather than a token in JSON", async () => {
+it.each(["01234567", "012345", "aB12cD34"])("forwards the complete code %s and requires verified email before issuing a cookie", async (code) => {
   m.ddb.mockImplementation(async (c) => c.constructor.name === "GetCommand" ? { Item: challenge() } : {});
-  const response = await handler(event("POST /api/guest/lectures/{shareId}/verify-code", { challengeId, code: "012345" }));
+  const response = await handler(event("POST /api/guest/lectures/{shareId}/verify-code", { challengeId, code }));
   expect(status(response)).toBe(200);
   expect(response).toMatchObject({ body: '{"verified":true}', cookies: [expect.stringContaining("HttpOnly; Secure; SameSite=Lax")] });
   expect(m.verify).toHaveBeenCalledWith("synthetic-token");
+  const command = m.cognito.mock.calls.map((call) => call[0]).find((command) => command.constructor.name === "AdminRespondToAuthChallengeCommand");
+  expect(command.input.ChallengeResponses.EMAIL_OTP_CODE).toBe(code);
   for (const command of m.ddb.mock.calls.map((c) => c[0].input).filter((c) => c.ConditionExpression)) {
     expect(command.ConditionExpression).toContain("#ttl > :now");
     expect(command.ExpressionAttributeNames["#ttl"]).toBe("ttl");

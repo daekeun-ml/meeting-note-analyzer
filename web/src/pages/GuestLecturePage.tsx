@@ -44,11 +44,11 @@ export function GuestLecturePage() {
         <label className="block text-sm">이메일<input aria-label="게스트 이메일" type="email" autoComplete="email" required maxLength={254} readOnly={!!challengeId}
           value={email} onChange={(e) => setEmail(e.target.value)} className="mt-2 h-12 w-full rounded-xl border border-line bg-surface px-3 text-[16px]" /></label>
         {sent && <p role="status" className="text-sm text-ink-2">초대된 이메일이라면 인증 메일을 보냈습니다. 받은 편지함과 스팸함을 확인해 주세요.</p>}
-        {challengeId && <label className="block text-sm">인증 코드<input aria-label="인증 코드" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" required maxLength={6}
-          value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} className="mt-2 h-12 w-full rounded-xl border border-line bg-surface px-3 text-[18px] tracking-widest" />
-          <span className="block mt-2 text-xs text-ink-3">6자리 코드를 5분 안에 입력해 주세요.</span></label>}
+        {challengeId && <label className="block text-sm">인증 코드<input aria-label="인증 코드" autoComplete="one-time-code" autoCapitalize="none" spellCheck={false} pattern="[A-Za-z0-9]{6,8}" required maxLength={8}
+          value={code} onChange={(e) => setCode(e.target.value.replace(/\s/g, ""))} className="mt-2 h-12 w-full rounded-xl border border-line bg-surface px-3 text-[18px] tracking-widest" />
+          <span className="block mt-2 text-xs text-ink-3">메일로 받은 코드를 생략하지 말고 5분 안에 입력해 주세요.</span></label>}
         {error && <InlineError>{error.message}</InlineError>}
-        <Button full type="submit" loading={busy} disabled={!email.trim() || (!!challengeId && code.length !== 6)}>{challengeId ? "인증하고 강의 열기" : "인증 코드 받기"}</Button>
+        <Button full type="submit" loading={busy} disabled={!email.trim() || (!!challengeId && !/^[A-Za-z0-9]{6,8}$/.test(code))}>{challengeId ? "인증하고 강의 열기" : "인증 코드 받기"}</Button>
         {challengeId && <div className="flex gap-2"><Button size="sm" variant="ghost" disabled={busy} onClick={() => request.mutate()}>코드 다시 받기</Button>
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => { setChallengeId(""); setCode(""); setSent(false); request.reset(); verify.reset(); }}>다른 이메일 사용</Button></div>}
       </form>

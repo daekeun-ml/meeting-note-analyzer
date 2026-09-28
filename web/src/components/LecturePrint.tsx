@@ -51,7 +51,7 @@ function Source({ page }: { page: LecturePage }) {
   </>;
 }
 
-export function LectureExportButton({ document: doc }: { document: LectureDocument }) {
+export function LectureExportButton({ document: doc, compact = false }: { document: LectureDocument; compact?: boolean }) {
   const [printable, setPrintable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -79,9 +79,9 @@ export function LectureExportButton({ document: doc }: { document: LectureDocume
       setError("인쇄 창을 열지 못했습니다. 브라우저의 인쇄 기능에서 PDF로 저장하세요.");
     } finally { setBusy(false); }
   }
-  return <div className="mt-4">
-    <Button variant="secondary" loading={busy} onClick={() => void exportPdf()}>PDF로 저장</Button>
-    <p className="mt-2 text-xs text-ink-3">전체 학습 자료와 수식, 복습 답안을 저장합니다. 인쇄 창에서 ‘PDF로 저장’을 선택하세요.</p>
+  return <div className={compact ? "shrink-0" : "mt-4"}>
+    <Button variant="success" size={compact ? "sm" : "md"} loading={busy} onClick={() => void exportPdf()}>PDF로 저장</Button>
+    {!compact && <p className="mt-2 text-xs text-ink-3">전체 학습 자료와 수식, 복습 답안을 저장합니다. 인쇄 창에서 ‘PDF로 저장’을 선택하세요.</p>}
     {error && <InlineError>{error}</InlineError>}
     {printable && <LecturePrint document={doc} />}
   </div>;

@@ -15,7 +15,9 @@ const clientId = process.env["GUEST_USER_POOL_CLIENT_ID"] ?? "";
 const cognito = new CognitoIdentityProviderClient({});
 const verifier = CognitoJwtVerifier.create({ userPoolId: poolId, clientId, tokenUse: "id" });
 const emailSchema = z.object({ email: z.string().trim().toLowerCase().email().max(254) });
-const codeSchema = z.object({ challengeId: z.string().uuid(), code: z.string().regex(/^\d{6}$/) });
+// Cognito EMAIL_OTP uses eight characters; retain compatibility with six-character codes.
+// Forward the complete code unchanged and let Cognito verify it.
+const codeSchema = z.object({ challengeId: z.string().uuid(), code: z.string().trim().regex(/^[A-Za-z0-9]{6,8}$/) });
 const epoch = () => Math.floor(Date.now() / 1000);
 const key = (id: string) => ({ PK: `GUEST_CHALLENGE#${id}`, SK: "META" });
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");

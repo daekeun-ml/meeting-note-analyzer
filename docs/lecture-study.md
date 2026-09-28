@@ -86,7 +86,7 @@ The chat source picker offers **회의록·전사**, **강의**, and **전체**.
 
 ## Guest sharing
 
-Choose **게스트 공유** on a completed lecture, enter up to 20 allowed email addresses, and choose an expiry of 7, 30 or 90 days. Creating the link does not send mail. Send the link to the intended readers; they request a six-digit email code on the shared page and enter it within five minutes. Guests do not enter a password.
+Choose **게스트 공유** from the lecture list or the detail page's action row, enter up to 20 allowed email addresses, and choose an expiry of 7, 30 or 90 days. Creating the link does not send mail. Send the link to the intended readers; they request an email code on the shared page and enter the complete code within five minutes. Eight-character Cognito codes and six-character codes are accepted for provider verification. Guests do not enter a password.
 
 A separate Cognito Essentials pool sends and verifies email OTPs using Cognito's default email delivery. The app client has a secret held on the server, and public self-signup is disabled. Code requests are rate limited; a challenge allows five attempts and can be used once. The verified ID token is kept in a Secure, HttpOnly, SameSite cookie for one hour. Cognito's default email sending quotas apply.
 

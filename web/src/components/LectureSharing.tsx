@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createLectureShareSchema } from "@meeting-notes/shared";
 import { useApi } from "../lib/api";
 import { Button, Card, InlineError } from "./ui";
 
-export function LectureSharing({ lectureId }: { lectureId: string }) {
-  const [open, setOpen] = useState(false); const [emails, setEmails] = useState(""); const [days, setDays] = useState(30);
+export function LectureSharing({ lectureId, open, onClose }: { lectureId: string; open: boolean; onClose: () => void }) {
+  const [emails, setEmails] = useState(""); const [days, setDays] = useState(30);
+  const panel = useRef<HTMLElement>(null);
   const [copied, setCopied] = useState(""); const [copyError, setCopyError] = useState("");
   const api = useApi(); const qc = useQueryClient();
   const key = ["lecture-shares", lectureId];
@@ -16,15 +17,19 @@ export function LectureSharing({ lectureId }: { lectureId: string }) {
     onSuccess: () => { setEmails(""); void qc.invalidateQueries({ queryKey: key }); },
   });
   const revoke = useMutation({ mutationFn: (id: string) => api.revokeLectureShare(lectureId, id), onSuccess: () => qc.invalidateQueries({ queryKey: key }) });
+  useEffect(() => {
+    if (open) panel.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+  }, [open]);
   async function copy(url: string) {
     setCopyError("");
     try { await navigator.clipboard.writeText(url); setCopied(url); }
     catch { setCopyError("링크를 선택해서 복사해 주세요."); }
   }
-  return <div className="mt-3">
-    <Button variant="secondary" onClick={() => setOpen((value) => !value)}>게스트 공유</Button>
-    {open && <Card className="mt-3 p-4 space-y-4">
-      <div><h2 className="font-semibold">이메일로 게스트 초대</h2><p className="mt-2 text-sm text-ink-2">지정한 이메일로 인증한 게스트가 이 강의의 학습 노트와 장표를 볼 수 있습니다. 비밀번호는 필요하지 않습니다.</p></div>
+  if (!open) return null;
+  return <section ref={panel} id="lecture-sharing" aria-label="게스트 공유 설정" className="mt-3 scroll-mt-3">
+    <Card className="p-4 space-y-4">
+      <div><div className="flex items-center justify-between gap-2"><h2 className="font-semibold">게스트 공유</h2><Button size="sm" variant="ghost" onClick={onClose}>닫기</Button></div>
+        <p className="mt-2 text-sm text-ink-2">지정한 이메일로 인증한 게스트가 이 강의의 학습 노트와 장표를 볼 수 있습니다. 비밀번호는 필요하지 않습니다.</p></div>
       <label className="block text-sm">초대할 이메일
         <textarea aria-label="초대할 이메일" value={emails} onChange={(e) => setEmails(e.target.value)} rows={3} maxLength={5100}
           placeholder="guest@example.com&#10;여러 주소는 줄바꿈이나 쉼표로 구분하세요."
@@ -49,6 +54,6 @@ export function LectureSharing({ lectureId }: { lectureId: string }) {
               <Button size="sm" variant="danger" loading={revoke.isPending} onClick={() => revoke.mutate(share.shareId)}>공유 해제</Button></div></>}
         </div>;
       })}</div>
-    </Card>}
-  </div>;
+    </Card>
+  </section>;
 }
