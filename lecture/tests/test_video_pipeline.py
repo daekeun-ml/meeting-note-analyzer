@@ -40,7 +40,7 @@ class Store:
 class Model:
     def __init__(self): self.calls = []
     def check(self): pass
-    def generate(self, schema, task, data, image=None, images=None, validate=None):
+    def generate(self, schema, task, data, image=None, images=None, validate=None, **kwargs):
         self.calls.append(schema)
         if schema == SlideReading:
             value = {"title": "Gradient descent" if "Gradient" in data["text"] else "Not presented", "description": "Attached slide", "concepts": ["Gradient"]}

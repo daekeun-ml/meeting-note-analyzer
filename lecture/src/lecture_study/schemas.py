@@ -64,7 +64,19 @@ class Assignment(Strict):
 
 
 class Alignment(Strict):
-    assignments: list[Assignment] = Field(max_length=120)
+    # A repaired proposal can split ranges at disputed boundaries.
+    assignments: list[Assignment] = Field(max_length=1000)
+    unresolvedSegmentIds: list[str] = Field(default_factory=list, max_length=1000)
+
+
+class SegmentChoice(Strict):
+    page: int | None = Field(ge=1, le=120)
+    confidence: float = Field(ge=0, le=1)
+    reason: str = Field(min_length=1, max_length=600)
+
+
+class AlignmentResolution(Strict):
+    choices: dict[str, SegmentChoice]
 
 
 class Concept(Strict):

@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from .alignment import page_evidence, transcript_batches, validate_alignment
+from .alignment import page_evidence, resolve_alignment, transcript_batches, validate_alignment, validate_alignment_sources
 from .customization import custom_prompt, request_cache_key, request_context, request_task
 from .export import flashcard_csv, markdown
 from .model import Model
@@ -90,10 +90,12 @@ def analyze(store, workdir: Path, check, model=None, search=None, render=render_
     for i, batch in enumerate(batches):
         check()
         def align(batch=batch):
-            return model.generate(Alignment,
+            slide_context = [{"page": r["page"], "title": r["title"], "concepts": r["concepts"], "description": r["description"][:650]} for r in readings]
+            proposal = model.generate(Alignment,
                 "Map the supplied recording segments to the slide deck by SPECIFIC conceptual and linguistic evidence. Return contiguous segment ranges per page, with confidence and a concise evidence-based reason in the output language. A range must use exact IDs from this batch, and must not overlap another range. Allow revisiting earlier slides and skipping slides; slide order or proportional time alone is not evidence. Do not map administrative chatter or unrelated discussions. Use low confidence for ambiguous links; leave unrelated segments unassigned. Cover lecture explanations thoroughly, not just keyword mentions.",
-                {"outputLanguage": language, "slides": [{"page": r["page"], "title": r["title"], "concepts": r["concepts"], "description": r["description"][:650]} for r in readings], "segments": batch},
-                validate=lambda value: validate_alignment(value, batch, len(slides))).model_dump()
+                {"outputLanguage": language, "slides": slide_context, "segments": batch},
+                validate=lambda value: validate_alignment_sources(value, batch, len(slides)))
+            return resolve_alignment(model, proposal, batch, slide_context, language).model_dump()
         alignment = Alignment.model_validate(store.cached(f"alignment-{i}.json", align))
         validate_alignment(alignment, batch, len(slides))
         alignments.append(alignment)
@@ -113,7 +115,9 @@ def analyze(store, workdir: Path, check, model=None, search=None, render=render_
         return {"page": slide["page"], "title": reading["title"], "sourceFile": source_context["fileName"], "slideText": slide["text"], "imageKey": store.prefix + f"slides/{slide['page']}.png", "alignment": alignment, "evidence": evidence, "outputLanguage": language, **study}
     pages = parallel_map(zip(slides, readings, strict=True), build_page, check=check, on_done=lambda n: store.progress("study", n, len(slides)))
 
-    return finish_lecture(store, model, search, check, record, language, pages, transcript["durationSec"], audience=audience)
+    unresolved = sum(len(a.unresolvedSegmentIds) for a in alignments)
+    alignment_warnings = [f"{unresolved}개 발언은 여러 장표와 연결되어 장표를 확정하지 못했습니다. 원본 전사에서 확인할 수 있습니다."] if unresolved else []
+    return finish_lecture(store, model, search, check, record, language, pages, transcript["durationSec"], audience=audience, alignment_warnings=alignment_warnings)
 
 
 def research_groups(pages: list[dict]) -> list[dict]:
@@ -144,7 +148,7 @@ def research_group(model: Model, search: GatewaySearch, group: dict, preferences
     return research_page(model, search, {"page": pages[0]["page"], "title": group["chapter"], "concepts": concepts, "searchQueries": queries, "outputLanguage": pages[0]["outputLanguage"]}, max_queries=3, preferences=preferences)
 
 
-def finish_lecture(store, model, search, check, record, language, pages, duration, video_analysis=None, audience=None):
+def finish_lecture(store, model, search, check, record, language, pages, duration, video_analysis=None, audience=None, alignment_warnings=None):
     preferences = request_context(record, availableDeckPages=[
         p.get("deckPage", p["page"]) for p in pages if p.get("source", "deck") == "deck"
     ])
@@ -172,7 +176,7 @@ def finish_lecture(store, model, search, check, record, language, pages, duratio
             return model.generate(Overview, task, {"outputLanguage": language, "title": record["title"], "parts": groups, **preferences}).model_dump()
         return model.generate(Overview, task, {"outputLanguage": language, "title": record["title"], "course": record["course"], "pages": rows, **preferences}).model_dump()
     overview = Overview.model_validate(store.cached(request_cache_key("overview.json", record), overview_task)).model_dump()
-    warnings = []
+    warnings = list(alignment_warnings or [])
     uncertain = sum(p["alignment"]["status"] != "matched" for p in pages)
     failures = sum(p["research"]["status"] == "failed" for p in pages)
     unit = "학습 구간" if pages and all(p.get("source") == "audio" for p in pages) else "장표"

@@ -6,6 +6,7 @@ import pytest
 from lecture_study.interview import generate_assessment
 from lecture_study.interview_schemas import scoped_assessment_schema
 from lecture_study.model import Model
+from lecture_study.schemas import Alignment
 
 
 def response(value):
@@ -86,3 +87,37 @@ def test_custom_evidence_validation_also_repairs_instead_of_bypassing_checks():
     model = Model(client=Client(), max_calls=3)
     result = generate_assessment(model, {}, [{"id": "q1"}, {"id": "q2"}], [], None)
     assert result["rating"] == 3 and model.calls == 2
+
+
+def test_truncation_increases_budget_but_never_accepts_partial_tool_output():
+    class Client:
+        calls = []
+        def converse(self, **kwargs):
+            self.calls.append(kwargs)
+            result = response({"assignments": []})
+            result["stopReason"] = "max_tokens"
+            return result
+    client = Client()
+    model = Model(client=client)
+    with pytest.raises(ValueError, match="cut off"):
+        model.generate(Alignment, "align", {}, max_output_tokens=16384)
+    assert [c["inferenceConfig"]["maxTokens"] for c in client.calls] == [16384, 32768, 32768]
+    assert "shorten repeated prose" in client.calls[1]["messages"][0]["content"][-1]["text"]
+    assert model.metrics()["modelCalls"] == 3
+
+
+def test_expanded_output_still_requires_semantically_valid_references():
+    class Client:
+        calls = []
+        def converse(self, **kwargs):
+            self.calls.append(kwargs)
+            if len(self.calls) == 1:
+                return {"stopReason": "max_tokens"}
+            return response({"assignments": [{"page": 2, "startSegmentId": "unknown", "endSegmentId": "unknown",
+                                             "confidence": 1, "reason": "Unsupported"}]})
+    client = Client()
+    def validate(value):
+        raise ValueError("Unknown source ID")
+    with pytest.raises(ValueError, match="Unknown source ID"):
+        Model(client=client).generate(Alignment, "align", {}, validate=validate)
+    assert [c["inferenceConfig"]["maxTokens"] for c in client.calls] == [8192, 16384, 16384]

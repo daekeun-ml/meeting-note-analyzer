@@ -38,7 +38,7 @@ class FakeModel:
 
     def __init__(self): self.calls, self.inputs = [], []
     def check(self): pass
-    def generate(self, schema, task, data, image=None, validate=None, images=None):
+    def generate(self, schema, task, data, image=None, validate=None, images=None, **kwargs):
         self.calls.append(schema); self.inputs.append((schema, copy.deepcopy(data)))
         if schema == SlideReading: value = {"title": f"Page {data['page']}", "description": "Gradient descent", "concepts": ["Gradient"]}
         elif schema == VideoObservation: value = {"title": "Page 1", "description": "Gradient descent on screen", "concepts": ["Gradient"], "visualType": "slide"}
