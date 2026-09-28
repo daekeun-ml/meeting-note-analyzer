@@ -10,6 +10,7 @@ from .schemas import Alignment, Audience, Overview, Papers, SlideReading, Study
 from .search import GatewaySearch, selected_papers
 from .slides import render_deck
 from .store import now
+from .study import deck_context, generate_study
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +58,9 @@ def analyze(store, workdir: Path, check, model=None, search=None, render=render_
     transcript = store.read(record["transcriptKey"])
     if not transcript:
         raise ValueError("Lecture transcript is missing")
+    if not record["assets"].get("slides"):
+        from .audio_analysis import analyze_audio
+        return analyze_audio(store, check, model, search, record, transcript)
     language = record["outputLanguage"]
     if language == "auto":
         language = transcript.get("language") or "ko"
@@ -78,6 +82,7 @@ def analyze(store, workdir: Path, check, model=None, search=None, render=render_
     readings = parallel_map(slides, read_slide, check=check, on_done=lambda n: store.progress("slides", n, len(slides)))
     store.update(pageCount=len(slides))
     audience = learner_profile(store, model, language, record, readings, segments)
+    source_context = deck_context(record, slides, readings)
 
     alignments = []
     for i, batch in enumerate(batches):
@@ -96,12 +101,13 @@ def analyze(store, workdir: Path, check, model=None, search=None, render=render_
         slide, reading = item
         evidence, alignment = page_evidence(slide["page"], alignments, batches)
         def make_study(slide=slide, reading=reading, evidence=evidence, alignment=alignment):
-            return model.generate(Study, STUDY_TASK,
-                {"outputLanguage": language, "audience": audience, "reading": reading, "nativeText": slide["text"], "alignment": alignment, "recordedSpeech": evidence}, image=slide["image"]).model_dump()
+            return generate_study(model, STUDY_TASK,
+                {"outputLanguage": language, "audience": audience, "reading": reading, "nativeText": slide["text"], "alignment": alignment, "sourceContext": source_context},
+                evidence, [slide["image"]])
         study = Study.model_validate(store.cached(f"study-{slide['page']}.{STUDY_CACHE_VERSION}.json", make_study)).model_dump()
         if not evidence:
             study["spokenSummary"] = ""
-        return {"page": slide["page"], "title": reading["title"], "slideText": slide["text"], "imageKey": store.prefix + f"slides/{slide['page']}.png", "alignment": alignment, "evidence": evidence, "outputLanguage": language, **study}
+        return {"page": slide["page"], "title": reading["title"], "sourceFile": source_context["fileName"], "slideText": slide["text"], "imageKey": store.prefix + f"slides/{slide['page']}.png", "alignment": alignment, "evidence": evidence, "outputLanguage": language, **study}
     pages = parallel_map(zip(slides, readings, strict=True), build_page, check=check, on_done=lambda n: store.progress("study", n, len(slides)))
 
     return finish_lecture(store, model, search, check, record, language, pages, transcript["durationSec"], audience=audience)
@@ -155,8 +161,9 @@ def finish_lecture(store, model, search, check, record, language, pages, duratio
     warnings = []
     uncertain = sum(p["alignment"]["status"] != "matched" for p in pages)
     failures = sum(p["research"]["status"] == "failed" for p in pages)
+    unit = "학습 구간" if pages and all(p.get("source") == "audio" for p in pages) else "장표"
     if uncertain:
-        warnings.append(f"{uncertain}개 장표는 녹음 연결이 불확실하거나 대응 발언을 찾지 못했습니다. 장표별 근거를 확인하세요.")
+        warnings.append(f"{uncertain}개 {unit}에서 녹음과의 연결이 불확실하거나 대응 발언을 찾지 못했습니다. 항목별 근거를 확인하세요.")
     if video_analysis:
         warnings.append(f"영상 화면은 {video_analysis['sampleIntervalSec']}초 간격의 표본과 구간별 대표 화면을 분석합니다. 빠른 화면 전환이나 연속 동작은 원본 영상에서 확인하세요.")
         if video_analysis["groupedScenes"]:
@@ -164,7 +171,7 @@ def finish_lecture(store, model, search, check, record, language, pages, duratio
         if not video_analysis["hasAudio"]:
             warnings.append("음성 트랙이 없는 영상입니다. 발언을 만들지 않고 영상 화면으로 학습 자료를 정리했습니다.")
     if failures:
-        warnings.append(f"{failures}개 장표의 논문 검색이 완료되지 않았습니다. 다시 시도하면 완료된 자료는 재사용합니다.")
+        warnings.append(f"{failures}개 {unit}의 논문 검색이 완료되지 않았습니다. 다시 시도하면 완료된 자료는 재사용합니다.")
     warnings.append("논문 안내는 검색 결과의 제목과 발췌문을 근거로 합니다. 세부 내용과 출판 상태는 연결된 원문에서 확인하세요.")
     document = {"version": 1, "lectureId": record["lectureId"], "title": record["title"], "course": record["course"], "generatedAt": now(), "outputLanguage": language, "durationSec": duration, "audience": audience, **overview, "pages": pages, "warnings": warnings, **({"videoAnalysis": video_analysis} if video_analysis else {})}
     document["usage"] = {**(model.metrics() if hasattr(model, "metrics") else {}), **(search.metrics() if hasattr(search, "metrics") else {})}

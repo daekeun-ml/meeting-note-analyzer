@@ -82,6 +82,13 @@ export class WebStack extends Stack {
         functionAssociations: [{ function: spaRewrite, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
       },
       additionalBehaviors: {
+        "/interview-uploads/*": {
+          origin: uploadOrigin,
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+        },
         "/lecture-uploads/*": {
           origin: uploadOrigin,
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,

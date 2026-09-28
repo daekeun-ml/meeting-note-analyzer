@@ -23,6 +23,7 @@ export interface ApiStackProps extends StackProps {
   chatMemoryId: string;
   chatMemoryArn: string;
   lectureApiFunction: lambda.IFunction;
+  interviewApiFunction: lambda.IFunction;
 }
 
 export class ApiStack extends Stack {
@@ -95,6 +96,16 @@ export class ApiStack extends Stack {
       ...["complete-upload", "start", "retry"].map((action): [string, apigw.HttpMethod[]] => [`/api/lectures/{id}/${action}`, [apigw.HttpMethod.POST]]),
     ];
     for (const [path, methods] of lectureRoutes) this.httpApi.addRoutes({ path, methods, integration: lectureIntegration, authorizer });
+    const interviewIntegration = new HttpLambdaIntegration("InterviewIntegration", props.interviewApiFunction);
+    const interviewRoutes: [string, apigw.HttpMethod[]][] = [
+      ["/api/interviews", [apigw.HttpMethod.GET, apigw.HttpMethod.POST]],
+      ["/api/interviews/{id}", [apigw.HttpMethod.DELETE]],
+      ["/api/interviews/{id}/result", [apigw.HttpMethod.GET]],
+      ["/api/interviews/{id}/markdown", [apigw.HttpMethod.GET]],
+      ["/api/interviews/{id}/settings", [apigw.HttpMethod.PATCH]],
+      ...["complete-upload", "start", "retry"].map((action): [string, apigw.HttpMethod[]] => [`/api/interviews/{id}/${action}`, [apigw.HttpMethod.POST]]),
+    ];
+    for (const [path, methods] of interviewRoutes) this.httpApi.addRoutes({ path, methods, integration: interviewIntegration, authorizer });
 
     this.apiDomain = `${this.httpApi.apiId}.execute-api.${this.region}.amazonaws.com`;
     new CfnOutput(this, "ApiUrl", { value: this.httpApi.apiEndpoint });

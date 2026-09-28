@@ -98,3 +98,43 @@ it("docks the video as a pinned mini player only while it is playing and scrolle
 it("wraps a long lecture title in the page header", async () => {
   expect(element.querySelector("h1")?.className).toContain("[overflow-wrap:anywhere]");
 });
+
+it("plays audio topic ranges without showing slide or video labels", async () => {
+  const result = fixture();
+  result.lecture.slidesName = undefined;
+  result.document!.pages[0] = { ...result.document!.pages[0]!, source: "audio", sourceFile: "class.mp3", audioRanges: [{ startSec: 10, endSec: 50 }], alignment: { status: "matched", confidence: 1, method: "audio_time", reason: "발언 시간" } };
+  api.lectureResult.mockResolvedValue(result);
+  await act(async () => { client.setQueryData(["lecture", "test"], result); await new Promise((resolve) => setTimeout(resolve, 10)); });
+  await act(async () => button("구간별 학습").click());
+  expect(element.textContent).toContain("음성 듣기");
+  expect(element.textContent).toContain("음성 시간 기준");
+  expect(element.textContent).not.toContain("영상에서 확인한");
+  expect(element.querySelector("img")).toBeNull();
+});
+
+it("prints every section and expanded answers with rendered math but no signed source links", async () => {
+  const result = fixture();
+  result.document!.pages.push({ ...result.document!.pages[0]!, page: 2, title: "두 번째 주제", explanation: "화면에 선택되지 않은 두 번째 설명" });
+  result.document!.pages[0]!.mathNotes![0] = {
+    ...result.document!.pages[0]!.mathNotes![0]!,
+    symbols: [{ symbol: "$\\eta$", meaning: "학습률" }], assumptions: ["미분 가능"],
+    sourceCheck: { status: "corrected", explanation: "원본 부호가 손실 정의와 충돌합니다.", correctedStatement: "$$\\delta=-\\frac{\\partial E}{\\partial s}$$" },
+  };
+  api.lectureResult.mockResolvedValue(result);
+  await act(async () => { client.setQueryData(["lecture", "test"], result); await new Promise((resolve) => setTimeout(resolve, 10)); });
+  const print = vi.spyOn(window, "print").mockImplementation(() => {});
+  await act(async () => button("PDF로 저장").click());
+  const printable = document.querySelector(".lecture-print")!;
+  expect(print).toHaveBeenCalledOnce();
+  expect(printable.textContent).toContain("두 번째 주제");
+  expect(printable.textContent).toContain("화면에 선택되지 않은 두 번째 설명");
+  expect(printable.textContent).toContain("최적점을 지나칠 수 있습니다.");
+  expect(printable.textContent).toContain("원본 오류 수정");
+  expect(printable.textContent).toContain("기호의 뜻");
+  expect(printable.querySelectorAll(".katex").length).toBeGreaterThan(3);
+  expect(printable.querySelector("details, audio, video, img")).toBeNull();
+  expect(printable.innerHTML).not.toContain("https://example.org/slides.pdf");
+  expect(printable.innerHTML).not.toContain("https://example.org/study.md");
+  await act(async () => window.dispatchEvent(new Event("afterprint")));
+  print.mockRestore();
+});

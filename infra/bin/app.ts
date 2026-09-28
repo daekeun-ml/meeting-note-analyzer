@@ -60,6 +60,7 @@ const api = new ApiStack(app, `${prefix}-Api`, {
   chatMemoryId: chat.chatMemoryId,
   chatMemoryArn: chat.chatMemoryArn,
   lectureApiFunction: lecture.apiFunction,
+  interviewApiFunction: lecture.interviewApiFunction,
 });
 new WebStack(app, `${prefix}-Web`, {
   env,

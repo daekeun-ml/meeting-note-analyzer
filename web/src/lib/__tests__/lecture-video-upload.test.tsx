@@ -44,3 +44,44 @@ it("does not accept an MP3 as the primary lecture video", async () => {
   expect(submit().disabled).toBe(true);
   expect(api.createLecture).not.toHaveBeenCalled();
 });
+
+async function audioMode() {
+  await act(async () => ([...element.querySelectorAll("button")].find((b) => b.textContent === "음성 MP3")!).click());
+}
+it("uploads MP3 alone through the audio asset and starts lecture analysis", async () => {
+  api.createLecture.mockResolvedValue({ lecture: { lectureId: "lecture" }, uploads: { audio: { uploadId: "a", parts: [], partSize: 16, expiresAt: "2099-01-01" } } });
+  await audioMode();
+  expect(fileInput("강의 음성").accept).toBe("audio/mpeg,.mp3");
+  await choose(fileInput("강의 음성"), new File(["mp3"], "course.mp3", { type: "audio/mpeg" }));
+  await act(async () => submit().click());
+  expect(api.createLecture.mock.calls[0]![0]).toMatchObject({ audio: { fileName: "course.mp3", contentType: "audio/mpeg" } });
+  expect(api.createLecture.mock.calls[0]![0].video).toBeUndefined();
+  expect(api.completeLectureUpload).toHaveBeenCalledWith("lecture", { asset: "audio", uploadId: "a", parts: [{ partNumber: 1, etag: "part" }] });
+  expect(api.startLecture).toHaveBeenCalledWith("lecture");
+});
+it("clears the previous media selection when switching format and rejects MP4 in audio mode", async () => {
+  await choose(fileInput("강의 영상"), new File(["mp4"], "course.mp4"));
+  await audioMode();
+  expect(submit().disabled).toBe(true);
+  await choose(fileInput("강의 음성"), new File(["mp4"], "course.mp4"));
+  expect(submit().disabled).toBe(true);
+  expect(element.textContent).toContain("MP3 음성을 선택하세요");
+});
+it("retries audio completion after a lost response without uploading the bytes again", async () => {
+  api.createLecture.mockResolvedValue({ lecture: { lectureId: "lecture" }, uploads: {
+    audio: { uploadId: "a", parts: [], partSize: 16, expiresAt: "2099-01-01" },
+    slides: { uploadId: "s", parts: [], partSize: 16, expiresAt: "2099-01-01" },
+  } });
+  api.completeLectureUpload.mockImplementation(async (_id, body) => { if (body.asset === "audio" && api.completeLectureUpload.mock.calls.length === 2) throw new Error("Network failure"); });
+  await audioMode();
+  await choose(fileInput("강의 음성"), new File(["mp3"], "course.mp3"));
+  await choose(fileInput("강의 장표 (선택)"), new File(["pdf"], "course.pdf"));
+  await act(async () => submit().click());
+  expect(api.startLecture).not.toHaveBeenCalled();
+  const resume = [...element.querySelectorAll("button")].find((b) => b.textContent === "업로드 이어서 진행")!;
+  await act(async () => resume.click());
+  expect(upload).toHaveBeenCalledTimes(2);
+  expect(api.createLecture).toHaveBeenCalledOnce();
+  expect(api.completeLectureUpload.mock.calls.map((c) => c[1].asset)).toEqual(["slides", "audio", "audio"]);
+  expect(api.startLecture).toHaveBeenCalledOnce();
+});

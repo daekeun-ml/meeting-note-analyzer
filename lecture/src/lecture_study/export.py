@@ -15,21 +15,38 @@ def markdown(document: dict) -> str:
     lines.extend(["", "## 복습 순서", *[f"- {x}" for x in document["reviewPlan"]]])
     for page in document["pages"]:
         lines.extend(["", f"## {page['page']}. {page['title']}"])
+        if page.get("sourceFile"):
+            lines.append(f"원본: {page['sourceFile']}" + (f" · {page.get('deckPage', page['page'])}페이지" if page.get("source") not in ("video", "audio") else ""))
+        if page.get("relatedPages"):
+            lines.extend(["", "관련 원본 장표: " + ", ".join(f"{ref['page']}페이지 {ref['topic']}" for ref in page["relatedPages"])])
+        if page.get("audioRanges"):
+            lines.extend(["", "### 음성 구간"])
+            lines.extend(f"- {int(r['startSec']) // 60:02d}:{int(r['startSec']) % 60:02d} ~ {int(r['endSec']) // 60:02d}:{int(r['endSec']) % 60:02d}" for r in page["audioRanges"])
         if page.get("videoRanges"):
             lines.extend(["", "### 영상 구간"])
             lines.extend(f"- {int(r['startSec']) // 60:02d}:{int(r['startSec']) % 60:02d} ~ {int(r['endSec']) // 60:02d}:{int(r['endSec']) % 60:02d}" for r in page["videoRanges"])
-        alignment = "영상 시간 기준" if page["alignment"].get("method") == "video_time" else f"{page['alignment']['status']} ({page['alignment']['confidence']:.0%})"
-        lines.extend(["", "### 화면 요약" if page.get("source") == "video" else "### 장표 요약", page["slideSummary"], "", "### 수업에서 언급된 내용", page["spokenSummary"] or "대응하는 발언을 확인하지 못했습니다.", f"연결: {alignment}", "", "### 학습 보충 설명", page["explanation"], "", "### 핵심 개념"])
+        alignment = {"video_time": "영상 시간 기준", "audio_time": "음성 시간 기준"}.get(page["alignment"].get("method"), f"{page['alignment']['status']} ({page['alignment']['confidence']:.0%})")
+        summary_title = {"video": "화면 요약", "audio": "음성 주제 요약"}.get(page.get("source"), "장표 요약")
+        lines.extend(["", f"### {summary_title}", page["slideSummary"], "", "### 수업에서 언급된 내용", page["spokenSummary"] or "대응하는 발언을 확인하지 못했습니다.", f"연결: {alignment}", "", "### 학습 보충 설명", page["explanation"], "", "### 핵심 개념"])
         lines.extend(f"- **{x['term']}**: {x['explanation']}" for x in page["concepts"])
         if page.get("mathNotes"):
             lines.extend(["", "### 수식과 정리"])
             for note in page["mathNotes"]:
                 lines.extend([f"- **[{NOTE_KIND[note['kind']]}] {note['name']}**", f"  {note['statement']}"])
+                check = note.get("sourceCheck")
+                if check:
+                    label = {"consistent": "원본 검토", "corrected": "원본 오류 수정", "uncertain": "원본 확인 필요"}[check["status"]]
+                    lines.append(f"  **{label}:** {check['explanation']}")
+                    if check.get("correctedStatement"):
+                        lines.append(f"  {'수정식' if check['status'] == 'corrected' else '검토할 해석'}: {check['correctedStatement']}")
+                lines.extend(f"  - {symbol['symbol']}: {symbol['meaning']}" for symbol in note.get("symbols", []))
+                if note.get("assumptions"):
+                    lines.append("  전제: " + "; ".join(note["assumptions"]))
                 lines.extend(f"  {i}. {step}" for i, step in enumerate(note["steps"], 1))
                 if note["intuition"]:
                     lines.append(f"  직관: {note['intuition']}")
                 if note["supplementary"]:
-                    lines.append("  (강의에서 생략된 증명을 보충했습니다)")
+                    lines.append("  (강의에서 생략된 증명을 보충했습니다. 추가 유도와 예시는 학습을 위한 AI 설명입니다.)")
         lines.extend(["", "### 복습 문제"])
         for question in page["reviewQuestions"]:
             lines.extend([f"- 질문 ({DIFFICULTY[question.get('difficulty', 'basic')]}): {question['question']}", f"  정답: {question['answer']}"])
