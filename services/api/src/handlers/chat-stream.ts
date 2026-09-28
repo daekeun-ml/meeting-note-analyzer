@@ -72,7 +72,9 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
     const res = await agentcore.send(
       new InvokeAgentRuntimeCommand({
         agentRuntimeArn: runtimeArn,
-        runtimeSessionId: `chat-${req.sessionId}`, // >= 33 chars; one AgentCore session per chat session
+        // Keep stored conversation history, but do not reuse a container running
+        // old tool definitions after a runtime deployment.
+        runtimeSessionId: `chat-${req.sessionId}-v${process.env["CHAT_RUNTIME_VERSION"] ?? "1"}`,
         runtimeUserId: sub,
         contentType: "application/json",
         accept: "text/event-stream",

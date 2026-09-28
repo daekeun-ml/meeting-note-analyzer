@@ -106,6 +106,54 @@ it("does not authenticate a wrong code or an unverified/mismatched email", async
   }
 });
 
+it("confirms a stale first-OTP claim only against the same verified Cognito identity", async () => {
+  m.ddb.mockImplementation(async (c) => c.constructor.name === "GetCommand" ? { Item: challenge() } : {});
+  m.verify.mockResolvedValue({ sub: "subject-1", "cognito:username": "canonical-user", email: guest, email_verified: false });
+  m.cognito.mockImplementation(async (c) => {
+    if (c.constructor.name === "AdminGetUserCommand") {
+      expect(c.input.Username).toBe("canonical-user");
+      return { Enabled: true, UserStatus: "CONFIRMED", UserAttributes: [
+        { Name: "sub", Value: "subject-1" }, { Name: "email", Value: guest }, { Name: "email_verified", Value: "true" },
+      ] };
+    }
+    if (c.constructor.name === "DescribeUserPoolClientCommand") return { UserPoolClient: { ClientSecret: "synthetic-test-secret" } };
+    return { AuthenticationResult: { IdToken: "synthetic-token" } };
+  });
+  expect(status(await handler(event("POST /api/guest/lectures/{shareId}/verify-code", { challengeId, code: "01234567" })))).toBe(200);
+  expect(status(await handler(event("GET /api/guest/lectures/{shareId}", undefined, true)))).toBe(200);
+});
+
+it.each([
+  { sub: "other-subject", email: guest, verified: "true", enabled: true },
+  { sub: "subject-1", email: "other@example.com", verified: "true", enabled: true },
+  { sub: "subject-1", email: guest, verified: "false", enabled: true },
+  { sub: "subject-1", email: guest, verified: "true", enabled: false },
+])("does not use another, unverified or disabled profile to confirm a token: %j", async ({ sub, email, verified, enabled }) => {
+  m.verify.mockResolvedValue({ sub: "subject-1", "cognito:username": "canonical-user", email: guest, email_verified: false });
+  m.cognito.mockResolvedValue({ Enabled: enabled, UserStatus: "CONFIRMED", UserAttributes: [
+    { Name: "sub", Value: sub }, { Name: "email", Value: email }, { Name: "email_verified", Value: verified },
+  ] });
+  expect(status(await handler(event("GET /api/guest/lectures/{shareId}", undefined, true)))).toBe(401);
+  expect(m.read).not.toHaveBeenCalled();
+});
+
+it("accepts a signed string true flag but never treats string false as verified", async () => {
+  m.verify.mockResolvedValueOnce({ email: guest, email_verified: "true" });
+  expect(status(await handler(event("GET /api/guest/lectures/{shareId}", undefined, true)))).toBe(200);
+  m.verify.mockResolvedValueOnce({ email: guest, email_verified: "false" });
+  expect(status(await handler(event("GET /api/guest/lectures/{shareId}", undefined, true)))).toBe(401);
+});
+
+it("resolves an omitted email claim only from the signed subject's verified provider record", async () => {
+  m.verify.mockResolvedValue({ sub: "subject-1", "cognito:username": "canonical-user" });
+  m.cognito.mockResolvedValue({ Enabled: true, UserStatus: "CONFIRMED", UserAttributes: [
+    { Name: "sub", Value: "subject-1" }, { Name: "email", Value: guest }, { Name: "email_verified", Value: "true" },
+  ] });
+  expect(status(await handler(event("GET /api/guest/lectures/{shareId}", undefined, true)))).toBe(200);
+  m.verify.mockResolvedValue({ sub: "subject-2", "cognito:username": "canonical-user" });
+  expect(status(await handler(event("GET /api/guest/lectures/{shareId}", undefined, true)))).toBe(401);
+});
+
 it("requires a valid verified guest token and current invitation for every read", async () => {
   const route = "GET /api/guest/lectures/{shareId}";
   expect(status(await handler(event(route)))).toBe(401);

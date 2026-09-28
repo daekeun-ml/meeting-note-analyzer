@@ -84,11 +84,15 @@ See [deployment](deployment.md) for setup and [operations](operations.md) for mo
 
 The chat source picker offers **회의록·전사**, **강의**, and **전체**. Choose all your lectures or one completed lecture; **이 강의에 질문하기** on a lecture opens a conversation pinned to that lecture. Changing the source starts a new conversation, so its history does not mix with another source. Session scope and ownership are enforced in both search filters and direct document tools. Lecture tools read the current published document and its group-to-slide mapping, and search discards superseded runs while the knowledge base catches up.
 
+Chat renders inline and displayed LaTeX while retaining clickable evidence references. The lecture tool accepts an omitted page for the outline and a physical `sourcePage` for the group containing that slide. Runtime deployments start a new container revision for subsequent turns while retaining the conversation's stored history.
+
 ## Guest sharing
 
 Choose **게스트 공유** from the lecture list or the detail page's action row, enter up to 20 allowed email addresses, and choose an expiry of 7, 30 or 90 days. Creating the link does not send mail. Send the link to the intended readers; they request an email code on the shared page and enter the complete code within five minutes. Eight-character Cognito codes and six-character codes are accepted for provider verification. Guests do not enter a password.
 
 A separate Cognito Essentials pool sends and verifies email OTPs using Cognito's default email delivery. The app client has a secret held on the server, and public self-signup is disabled. Code requests are rate limited; a challenge allows five attempts and can be used once. The verified ID token is kept in a Secure, HttpOnly, SameSite cookie for one hour. Cognito's default email sending quotas apply.
+
+When an initial token predates the email-verification update, the server reads the current Cognito user and requires a confirmed, enabled account with the same signed subject, the same email, and a verified email attribute. The application never changes verification attributes to grant access.
 
 Guests can read the shared lecture's published study notes and images and save the notes as PDF. They do not receive access to owner APIs, chat, original recording downloads or the full transcript. Every document and image request checks the current email allowlist, expiry, revocation and lecture ownership. Private responses are not cached; images use authenticated proxy URLs rather than bearer download links. **공유 해제** prevents subsequent reads, including image requests. Copies a reader already saved remain outside the app's control.
 

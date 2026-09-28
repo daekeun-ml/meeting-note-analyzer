@@ -10,7 +10,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
-from claude_agent_sdk import create_sdk_mcp_server, tool
+from claude_agent_sdk import ToolAnnotations, create_sdk_mcp_server, tool
 
 from . import gateway, memory
 from .config import DATA_BUCKET, LECTURE_TABLE_NAME, MAX_RESULTS, REGION, TABLE_NAME, WEB_ORIGIN
@@ -49,7 +49,8 @@ class TurnContext:
 
 
 def _text(payload: Any) -> dict:
-    return {"content": [{"type": "text", "text": payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)}]}
+    return {"content": [{"type": "text", "text": payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)}],
+            **({"is_error": True} if isinstance(payload, dict) and payload.get("error") else {})}
 
 
 def _ddb():
@@ -106,10 +107,10 @@ def _lecture_document(ctx: TurnContext, lecture_id: str) -> dict | None:
     return ctx.documents[lecture_id]
 
 
-def compact_lecture(doc: dict, lecture_id: str, page: int | None = None) -> dict:
+def compact_lecture(doc: dict, lecture_id: str, page: int | None = None, source_page: int | None = None) -> dict:
     """Outline of a lecture study document, or one section in full (its summaries, math notes, questions and cards)."""
     pages = doc.get("pages", [])
-    if page is None:
+    if page is None and source_page is None:
         audience = doc.get("audience") or {}
         return {
             "lectureId": lecture_id, "title": doc.get("title"), "course": doc.get("course"), "audienceLevel": audience.get("level"),
@@ -117,9 +118,21 @@ def compact_lecture(doc: dict, lecture_id: str, page: int | None = None) -> dict
             "selectedPages": doc.get("selectedPages"), "grouped": doc.get("grouped", False),
             "pages": [{"page": p.get("page"), "sourcePages": p.get("sourcePages"), "title": p.get("title"), "startSec": (p.get("videoRanges") or [{}])[0].get("startSec")} for p in pages],
         }
-    match = next((p for p in pages if p.get("page") == page), None)
+    def contains_source(p, number):
+        return number in p.get("sourcePages", [p.get("deckPage", p.get("page"))]) if p.get("source") not in ("audio", "video") else False
+    if source_page is not None:
+        match = next((p for p in pages if contains_source(p, source_page)), None)
+        if match and page is not None and match.get("page") != page:
+            return {"error": "page and sourcePage refer to different learning groups"}
+    else:
+        match = next((p for p in pages if p.get("page") == page), None)
+        # Older prompts sometimes pass a physical slide number as page. Resolve
+        # it only from the document's explicit mapping, never by position.
+        if not match and doc.get("grouped"):
+            match = next((p for p in pages if contains_source(p, page)), None)
     if not match:
-        return {"error": "page not found", "pages": [p.get("page") for p in pages]}
+        return {"error": "page not found in this lecture's selected scope",
+                "pages": [{"page": p.get("page"), "sourcePages": p.get("sourcePages")} for p in pages]}
     return {"lectureId": lecture_id, "title": doc.get("title"), "page": {
         "page": match.get("page"), "sourcePages": match.get("sourcePages"), "title": match.get("title"), "startSec": (match.get("videoRanges") or [{}])[0].get("startSec"),
         "slideSummary": match.get("slideSummary"), "spokenSummary": match.get("spokenSummary"), "explanation": (match.get("explanation") or "")[:2000],
@@ -267,6 +280,21 @@ def scoped_list(ctx, kind, limit=20):
     return _completed_meetings(ctx.sub, limit)
 
 
+LECTURE_INPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "lectureId": {"type": "string", "minLength": 1, "maxLength": 128,
+                      "description": "The lecture ID. Omit only when this conversation is pinned to one lecture."},
+        "page": {"type": ["integer", "null"], "minimum": 0, "maximum": 360,
+                 "description": "Learning-group ID from the outline. Omit or use 0 for the outline."},
+        "sourcePage": {"type": ["integer", "null"], "minimum": 1, "maximum": 120,
+                       "description": "Physical slide number, e.g. 45. Returns the complete selected learning group containing it."},
+    },
+    "required": [],
+    "additionalProperties": False,
+}
+
+
 def build_server(ctx: TurnContext):
     @tool("search_meetings", "Hybrid search over this user's meeting documents, transcripts and lecture study notes (managed knowledge base). Returns passages labeled [E#] that you must cite. Use a focused query; optionally restrict to one meetingId.", {"query": str, "meetingId": str})
     async def search_meetings(args: dict) -> dict:
@@ -327,9 +355,12 @@ def build_server(ctx: TurnContext):
         limit = max(1, min(int(args.get("limit") or 20), 50))
         return _text({"lectures": scoped_list(ctx, "lecture", limit)})
 
-    @tool("get_lecture", "One lecture the user owns. Without page: outline (audience level, overview, objectives, review plan, page titles). With page: that section's slide and speech summaries, explanation, concepts, math notes with steps, review questions and flashcards. Adds one evidence entry [E#].", {"lectureId": str, "page": int})
+    @tool("get_lecture", "Read the current published lecture. Omit page/sourcePage for its outline. Use page for a learning-group ID, or sourcePage for a physical slide number such as 45; the latter returns the entire group containing that slide. Omit lectureId in a pinned lecture conversation. Returns summaries, explanation, math notes, source corrections and questions with evidence [E#].",
+          LECTURE_INPUT_SCHEMA, annotations=ToolAnnotations(readOnlyHint=True, maxResultSizeChars=80_000))
     async def get_lecture(args: dict) -> dict:
-        lid = str(args["lectureId"])
+        lid = args.get("lectureId") or ctx.lecture_id
+        if not isinstance(lid, str) or not lid:
+            return _text({"error": "lectureId required", "instruction": "Choose one of the user's lectures using list_lectures."})
         rec = _owned_lecture(ctx, lid)
         if not rec:
             return _text({"error": "lecture not found"})
@@ -338,10 +369,15 @@ def build_server(ctx: TurnContext):
         doc = _read_json(rec["documentKey"])
         if not doc:
             return _text({"error": "document unavailable"})
-        page = int(args["page"]) if args.get("page") else None
-        compact = compact_lecture(doc, lid, page)
+        page, source_page = args.get("page"), args.get("sourcePage")
+        if page is not None and (type(page) is not int or not 0 <= page <= 360):
+            return _text({"error": "page must be a learning-group integer or omitted"})
+        if source_page is not None and (type(source_page) is not int or not 1 <= source_page <= 120):
+            return _text({"error": "sourcePage must be a physical slide integer or omitted"})
+        compact = compact_lecture(doc, lid, page or None, source_page)
         if "error" in compact:
             return _text(compact)
+        page = compact["page"]["page"] if "page" in compact else None
         label = f"E{len(ctx.evidence) + 1}"
         snippet = (compact["page"]["slideSummary"] if page else compact["overview"]) or ""
         ctx.add([{"id": label, "source": "document", "kind": "lecture", "meetingId": None, "lectureId": lid, "page": page, "title": doc.get("title"), "date": (rec.get("createdAt") or "")[:10], "meetingType": None, "snippet": snippet[:420], "score": None, "startSec": None, "segmentIds": [], "url": f"{WEB_ORIGIN}/lectures/{lid}" + (f"?page={page}" if page else "")}])

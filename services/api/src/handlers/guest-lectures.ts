@@ -79,6 +79,32 @@ async function requestCode(event: APIGatewayProxyEventV2, shareId: string) {
   return reply(202, { challengeId });
 }
 interface Challenge { shareId: string; email: string; username: string; session: string; ttl: number; usedAt?: number }
+
+/** Only call after signature, issuer, client and token-use verification.
+ * A first OTP token can predate the provider's email_verified update. In that
+ * case require the current, enabled Cognito user to confirm the SAME subject
+ * and email; never mark an address verified ourselves.
+ */
+async function verifiedTokenEmail(claims: Awaited<ReturnType<typeof verifier.verify>>): Promise<string | null> {
+  const email = typeof claims.email === "string" ? claims.email.trim().toLowerCase() : null;
+  if (claims.email !== undefined && !email) return null;
+  const flag: unknown = claims.email_verified;
+  if (email && (flag === true || flag === "true")) return email;
+  if (typeof claims.sub !== "string" || !claims.sub) return null;
+  const username = typeof claims["cognito:username"] === "string" ? claims["cognito:username"] : claims.sub;
+  try {
+    const user = await cognito.send(new AdminGetUserCommand({ UserPoolId: poolId, Username: username }));
+    const attributes = Object.fromEntries((user.UserAttributes ?? []).map((a) => [a.Name, a.Value]));
+    const providerEmail = attributes["email"]?.trim().toLowerCase();
+    if (user.Enabled !== true || user.UserStatus !== "CONFIRMED" || attributes["sub"] !== claims.sub ||
+        !providerEmail || (email && providerEmail !== email) || attributes["email_verified"] !== "true") return null;
+    return providerEmail;
+  } catch (error) {
+    if ((error as Error).name === "UserNotFoundException") return null;
+    throw error;
+  }
+}
+
 async function verifyCode(event: APIGatewayProxyEventV2, shareId: string) {
   const { challengeId, code } = parseBody(event, codeSchema);
   const result = await ddb.send(new GetCommand({ TableName: lectureTable(), Key: key(challengeId), ConsistentRead: true }));
@@ -106,7 +132,12 @@ async function verifyCode(event: APIGatewayProxyEventV2, shareId: string) {
   }
   if (!token) throw new HttpError(400, "인증을 완료하지 못했습니다", "invalid_code");
   const claims = await verifier.verify(token);
-  if (claims.email_verified !== true || typeof claims.email !== "string" || claims.email.toLowerCase() !== challenge.email) throw new HttpError(403, "이메일 인증을 확인할 수 없습니다");
+  const email = await verifiedTokenEmail(claims);
+  if (!email || email !== challenge.email) {
+    console.warn("guest email verification mismatch", { emailPresent: typeof claims.email === "string",
+      claimVerificationType: typeof claims.email_verified, providerVerified: !!email, emailMatchesChallenge: email === challenge.email });
+    throw new HttpError(403, "이메일 인증을 확인할 수 없습니다");
+  }
   if (!invited(activeShare(await getShare(shareId)), challenge.email)) throw new HttpError(403, "공유 접근이 해제되었습니다");
   await ddb.send(new UpdateCommand({ TableName: lectureTable(), Key: key(challengeId), UpdateExpression: "SET usedAt = :now",
     ConditionExpression: "attribute_exists(PK) AND attribute_not_exists(usedAt) AND #ttl > :now",
@@ -119,9 +150,10 @@ async function authorizedShare(event: APIGatewayProxyEventV2, shareId: string) {
   let claims;
   try { claims = await verifier.verify(cookie.slice("mna_guest=".length)); }
   catch { throw new HttpError(401, "이메일 인증이 만료되었습니다. 다시 인증해 주세요", "guest_auth_required"); }
-  if (claims.email_verified !== true || typeof claims.email !== "string") throw new HttpError(401, "이메일 인증이 필요합니다", "guest_auth_required");
+  const email = await verifiedTokenEmail(claims);
+  if (!email) throw new HttpError(401, "이메일 인증이 필요합니다", "guest_auth_required");
   const share = activeShare(await getShare(shareId));
-  if (!invited(share, claims.email)) throw new HttpError(403, "이 강의에 초대된 이메일이 아닙니다", "not_invited");
+  if (!invited(share, email)) throw new HttpError(403, "이 강의에 초대된 이메일이 아닙니다", "not_invited");
   const lecture = await getLecture(share.lectureId);
   if (!lecture || lecture.owner !== share.owner || !lecture.documentKey) throw new HttpError(404, "공유된 강의를 찾을 수 없습니다");
   if (!lecture.documentKey.startsWith(`lecture-results/${share.lectureId}/`)) throw new Error("Invalid lecture result key");

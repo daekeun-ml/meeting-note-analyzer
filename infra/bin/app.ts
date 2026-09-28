@@ -72,6 +72,7 @@ new WebStack(app, `${prefix}-Web`, {
   userPoolId: auth.userPool.userPoolId,
   userPoolClientId: auth.userPoolClient.userPoolClientId,
   chatRuntimeArn: chat.chatRuntimeArn,
+  chatRuntimeVersion: chat.chatRuntimeVersion,
   alarmTopic: data.alarmTopic,
   dataBucket: data.dataBucket,
   webConfig: {
