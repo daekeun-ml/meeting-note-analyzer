@@ -64,7 +64,7 @@ def scoped_answer_schema(answer_ids, context_ids, resume_ids=()):
 
 class AssessmentPoint(Strict):
     exchangeIds: list[str] = Field(min_length=1, max_length=12, description="Required supporting interview question IDs, never resume claim or speech segment IDs.")
-    text: str = Field(min_length=1, max_length=1800)
+    text: str = Field(min_length=1, max_length=3200)
 
 
 class InterviewAssessment(Strict):
@@ -83,16 +83,10 @@ def scoped_assessment_schema(exchange_ids):
     point = create_model("AssessmentEvidence", __base__=AssessmentPoint,
                          exchangeIds=(list[identifier], Field(min_length=1, max_length=12,
                              description="Required: select the actual question IDs supporting this feedback. Resume IDs cannot replace these.")),
-                         text=(str, Field(min_length=1, max_length=1800, description="Aim for one short paragraph under 650 characters, about 50–80 English words or equivalent Korean. No internal IDs.")))
+                         text=(str, Field(min_length=1, max_length=3200, description="One paragraph, aiming for 70–110 English words or comparable Korean detail: concrete evidence, individual contribution, outcome and target-level implication. No internal IDs.")))
     return create_model("ScopedInterviewAssessment", __base__=InterviewAssessment,
-                        positives=(list[point], Field(max_length=1 if ids else 0, description="One concise strengths paragraph, or empty if unsupported.")),
-                        concerns=(list[point], Field(max_length=1 if ids else 0, description="One concise concerns paragraph, grouping related gaps; empty if unsupported.")))
-
-
-class AssessmentSummary(Strict):
-    # Brevity is a presentation target, not a reason to reject otherwise grounded analysis.
-    positiveText: str | None = Field(min_length=1, max_length=1800)
-    concernText: str | None = Field(min_length=1, max_length=1800)
+                        positives=(list[point], Field(max_length=3 if ids else 0, description="Up to three substantive strengths paragraphs, grouping related evidence. Empty if unsupported.")),
+                        concerns=(list[point], Field(max_length=2 if ids else 0, description="Up to two paragraphs distinguishing development areas from material target-level gaps. Empty if unsupported.")))
 
 
 class ResumePage(Strict):

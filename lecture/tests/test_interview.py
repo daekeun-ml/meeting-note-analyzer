@@ -2,8 +2,8 @@ import copy
 import json
 import pytest
 
-from lecture_study.interview import analyze_interview, assessment_evidence, clean_feedback_markers, comparison_context, concise_assessment, generate_answer, generate_assessment, validate_answer, validate_assessment, validate_resume_comparison
-from lecture_study.interview_schemas import InterviewAnswer, InterviewAssessment, AssessmentSummary, InterviewRoster, QuestionIndex, ResumeClaims, ResumeComparison, ResumePage, GroundedPoint, scoped_answer_schema, scoped_assessment_schema
+from lecture_study.interview import analyze_interview, assessment_evidence, clean_feedback_markers, comparison_context, generate_answer, generate_assessment, validate_answer, validate_assessment, validate_resume_comparison
+from lecture_study.interview_schemas import InterviewAnswer, InterviewAssessment, InterviewRoster, QuestionIndex, ResumeClaims, ResumeComparison, ResumePage, GroundedPoint, scoped_answer_schema, scoped_assessment_schema
 from test_pipeline import FakeStore
 
 
@@ -314,65 +314,41 @@ def test_assessment_merge_can_only_cite_evidence_in_its_selected_partials():
     assert result == partial
 
 
-def test_shortening_preserves_rating_and_exact_evidence_and_reuses_cached_summary():
-    value = {"rating": 2, "evidenceStatus": "limited",
-             "positives": [{"text": "Hands-on retrieval work. " * 35, "exchangeIds": ["q1", "q2"]}],
-             "concerns": [{"text": "Required hints to explain a core mechanism. " * 20, "exchangeIds": ["q3"]}],
-             "levelAssessment": "Depth was below the target level on the probed topics.", "followUps": []}
-    original = copy.deepcopy(value)
-    class SummaryModel:
-        calls = 0
-        sources = []
-        def generate(self, schema, task, data, validate=None):
-            self.calls += 1
-            self.sources.append(copy.deepcopy(data["assessment"]))
-            assert schema == AssessmentSummary
-            result = schema(positiveText="The candidate described practical retrieval work.",
-                            concernText="Core explanations required hints and did not demonstrate the requested depth.")
-            validate(result)
-            return result
-    cached = FakeStore(None)
-    model = SummaryModel()
-    result = concise_assessment(model, value, cached.cached, "domain_depth", "en")
-    assert value == original
-    assert result["rating"] == 2 and result["evidenceStatus"] == "limited"
-    assert result["positives"][0]["exchangeIds"] == ["q1", "q2"]
-    assert result["concerns"][0]["exchangeIds"] == ["q3"]
-    assert result == concise_assessment(model, value, cached.cached, "domain_depth", "en")
-    assert model.calls == 1
-    assert model.sources == [original]
-    value["positives"][0]["text"] += "A different observation."
-    concise_assessment(model, value, cached.cached, "domain_depth", "en")
-    assert model.calls == 2 and model.sources[-1] == value
-    assert all(len(p["text"]) <= 650 for field in ("positives", "concerns") for p in result[field])
-
-
-def test_shortening_cannot_invent_positive_evidence_or_discard_a_concern():
-    value = {"rating": 2, "evidenceStatus": "limited", "positives": [],
-             "concerns": [{"text": "A concrete observed gap. " * 35, "exchangeIds": ["q1"]}],
-             "levelAssessment": "A probed gap", "followUps": []}
-    class InvalidModel:
-        def generate(self, schema, task, data, validate=None):
-            result = schema(positiveText="Invented positive evidence.", concernText=None)
-            validate(result)
-            return result
-    assert concise_assessment(InvalidModel(), value, FakeStore(None).cached, "domain_depth", "en") == value
-
-
-def test_summary_format_failure_retains_valid_analysis_and_is_not_cached():
-    value = {"rating": 2, "evidenceStatus": "limited", "positives": [],
-             "concerns": [{"text": "A concrete observed gap. " * 35, "exchangeIds": ["q1"]}],
-             "levelAssessment": "A probed gap", "followUps": []}
-    class FailedSummary:
-        calls = 0
-        def generate(self, *args, **kwargs):
-            self.calls += 1
-            raise ValueError("AssessmentSummary failed validation")
-    cached, model = FakeStore(None), FailedSummary()
-    before = copy.deepcopy(cached.values)
-    for _ in range(2):
-        assert concise_assessment(model, value, cached.cached, "domain_depth", "en") == value
-    assert model.calls == 2 and cached.values == before
+def test_feedback_refresh_preserves_detailed_paragraphs_citations_and_cached_source_notes(monkeypatch):
+    import lecture_study.interview as module
+    data = store()
+    with monkeypatch.context() as legacy:
+        legacy.setattr(module, "ASSESSMENT_VERSION", "v6")
+        analyze_interview(data, lambda: None, model=Model())
+    old_document = copy.deepcopy(data.values[data.prefix + data.run_prefix + "document.json"])
+    paragraphs = [("Reported validation work with explicit outcome limitations. " * 14).strip(),
+                  "This second finding groups distinct implementation evidence.",
+                  "The observed misconception remains a material gap in the selected competency."]
+    class NarrativeModel(Model):
+        def generate(self, schema, task, source, validate=None, **kwargs):
+            if issubclass(schema, InterviewAssessment) and source["criterion"] == "domain_depth":
+                self.calls.append(schema)
+                result = schema(rating=2, evidenceStatus="sufficient",
+                    positives=[{"text": text, "exchangeIds": ["q2"]} for text in paragraphs[:2]],
+                    concerns=[{"text": paragraphs[2], "exchangeIds": ["q1"]}],
+                    levelAssessment="The material misconception is below the probed target-level requirement.", followUps=[])
+                validate(result)
+                return result
+            return super().generate(schema, task, source, validate=validate, **kwargs)
+    model = NarrativeModel()
+    analyze_interview(data, lambda: None, model=model)
+    document = data.values[data.prefix + data.run_prefix + "document.json"]
+    assessment = document["assessments"][0]
+    assert [p["text"] for p in assessment["positives"] + assessment["concerns"]] == paragraphs
+    assert [p["exchangeIds"] for p in assessment["positives"] + assessment["concerns"]] == [["q2"], ["q2"], ["q1"]]
+    assert document["exchanges"] == old_document["exchanges"]
+    assert not any(issubclass(schema, (InterviewAnswer, InterviewRoster, QuestionIndex)) for schema in model.calls)
+    markdown = data.files[data.run_prefix + "interview.md"].decode()
+    assert "\n\n".join(paragraphs) in markdown
+    assert "(+) " not in markdown and "(-) " not in markdown
+    calls = list(model.calls)
+    analyze_interview(data, lambda: None, model=model)
+    assert model.calls == calls
 
 
 def test_long_model_comparisons_are_preserved_while_assessment_context_stays_bounded():

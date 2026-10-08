@@ -38,6 +38,27 @@ beforeEach(async () => {
 });
 afterEach(async () => { await act(async () => root.unmount()); element.remove(); client.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const button = (text: string) => [...element.querySelectorAll("button")].find((b) => b.textContent === text)!;
+it("renders narrative feedback and Summary as separate paragraphs while retaining evidence navigation", async () => {
+  const result = fixture();
+  const doc = result.document!;
+  doc.assessments[0]!.positives = [
+    { text: "The candidate described a concrete project decision.", exchangeIds: ["q1"] },
+    { text: "The candidate also explained the handover process.", exchangeIds: ["q1"] },
+  ];
+  doc.overallSummary!.rationale = "Project delivery supports this level.\n\nCollaboration adds positive evidence.\n\nRemaining development areas are non-blocking.";
+  await act(async () => { client.setQueryData(["interview", "i"], result); });
+  await act(async () => button("AI 평가 의견").click());
+  const paragraphs = [...element.querySelectorAll("p")].map((p) => p.textContent);
+  expect(paragraphs).toContain("The candidate described a concrete project decision.");
+  expect(paragraphs).toContain("The candidate also explained the handover process.");
+  expect(paragraphs).toContain("The demonstrated depth fell short of the resume claim.");
+  expect(paragraphs).toContain("Project delivery supports this level.");
+  expect(paragraphs).toContain("Collaboration adds positive evidence.");
+  expect(paragraphs).toContain("Remaining development areas are non-blocking.");
+  expect(element.textContent).not.toContain("(+)");
+  expect(element.textContent).not.toContain("(−)");
+  expect(button("근거 q1")).toBeDefined();
+});
 it("shows the overall binary recommendation before competency opinions and links back to its evidence", async () => {
   await act(async () => button("AI 평가 의견").click());
   const summary = element.querySelector('section[aria-label="종합 의견 Summary"]')!;

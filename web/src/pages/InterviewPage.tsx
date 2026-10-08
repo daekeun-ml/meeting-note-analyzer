@@ -147,7 +147,7 @@ function OverallSummary({ value, jump }: { value: InterviewOverallSummary; jump:
   return <section aria-label="종합 의견 Summary"><Card className="p-4">
     <h2 className="font-semibold">종합 의견 (Summary)</h2>
     <p className="mt-4 text-sm leading-relaxed"><strong className={value.recommendation === "Inclined" ? "text-success" : "text-danger"}>{value.recommendation}</strong>, {value.reason}</p>
-    <p className="mt-3 text-sm leading-relaxed">{value.rationale}</p>
+    {value.rationale.split(/\n\s*\n/).filter(Boolean).map((paragraph, i) => <p key={i} className="mt-3 text-sm leading-relaxed">{paragraph}</p>)}
     <details className="mt-4 pt-3 border-t border-line">
       <summary className="text-xs text-accent cursor-pointer">종합 의견 근거</summary>
       <p className="mt-3 text-xs text-ink-3">{value.criterionIds.map((criterion) => INTERVIEW_CRITERION_LABELS[criterion]).join(" · ")}</p>
@@ -162,7 +162,7 @@ function Assessment({ value, jump, openResume, hasResumeGaps = false }: { value:
   const hasOpinion = value.positives.length + value.concerns.length > 0;
   return <Card className="p-4"><div className="flex flex-wrap justify-between items-center gap-2"><h2 className="font-semibold">{INTERVIEW_CRITERION_LABELS[value.criterion]}</h2><Pill tone={tone}>{value.rating === null ? "근거 부족 · 미평가" : `${value.rating}: ${INTERVIEW_RATINGS[value.rating]}`}</Pill></div>
     {value.rating !== null && value.evidenceStatus === "limited" && <p className="mt-2 text-xs text-warning">잠정 평가 · 확인된 근거에 기반한 점수이며 평가 범위에 제한이 있습니다.</p>}
-    {([{ sign: "+", points: value.positives }, { sign: "−", points: value.concerns }]).map(({ sign, points }) => points.length > 0 && <p key={sign} className="mt-4 text-sm leading-relaxed"><strong>({sign}) </strong>{points.map((point) => point.text).join(" ")}</p>)}
+    {[...value.positives, ...value.concerns].map((point, i) => <p key={i} className="mt-4 text-sm leading-relaxed whitespace-pre-line">{point.text}</p>)}
     {!hasOpinion && <p className="mt-4 text-sm text-ink-2 leading-relaxed">{value.levelAssessment}</p>}
     <details className="mt-4 pt-3 border-t border-line"><summary className="text-xs text-accent cursor-pointer">평가 근거·추가 확인</summary>
       {hasOpinion && <p className="mt-3 text-sm text-ink-2 leading-relaxed">{value.levelAssessment}</p>}

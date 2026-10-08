@@ -35,7 +35,7 @@ The result separates original questions, follow-up questions, clarifications, ca
 
 The default note view uses concise questions and candidate-answer bullets targeting about one quarter of the detailed answer length. It omits per-question resume context and the long review/uncertainty paragraphs. **전체 답변·녹음 보기** expands the detailed answer and recording. Empty or unclear answers remain empty or briefly qualified; shortening never invents an answer or changes a score. Speaker labels use **면접관** and **후보자** throughout notes, recording references and transcript downloads.
 
-Opinions cover only the selected criteria, with at most one concise strengths paragraph and one concerns paragraph per criterion. The two paragraphs include the implications for the target level. Internal question/resume IDs are not part of the narrative. **평가 근거·추가 확인** expands the question links, level summary, and follow-up questions; each question links back to the original speech and audio time.
+Opinions cover only the selected criteria. With enough evidence, each opinion uses 3–5 narrative paragraphs (roughly 250–450 English words, or comparable detail in Korean), explaining concrete examples, individual contributions, outcomes and target-level implications. Thin evidence gets shorter feedback without filler. Strengths and concerns remain grounded separately, but appear as connected paragraphs rather than (+)/(-) blocks. Internal question/resume IDs are not part of the narrative. **평가 근거·추가 확인** expands the question links, level summary, and follow-up questions; each question links back to the original speech and audio time.
 
 The rating scale is:
 
@@ -51,7 +51,9 @@ Five is exceptional: the prompt requires multiple concrete examples, demonstrate
 
 Mixed requires independently demonstrated strengths at the target level alongside concerns. Practical exposure, tool names, and answers supplied through hints do not offset material gaps in core reasoning. Where the probed skills are predominantly below the target level, Mild Concern is appropriate despite some hands-on experience. For L6/L7, the assessment examines personal design decisions, alternatives, tradeoffs and depth when those were probed.
 
-The **종합 의견 (Summary)** card appears above the competency opinions. It gives an advisory **Inclined** or **Not Inclined**, a one-line reason, and one concise paragraph in the selected opinion language. Borderline always maps to **Not Inclined**. Inclined requires clear support from the observed criteria: Mixed, Concern/Mild Concern or limited evidence cannot be averaged into a positive recommendation. Unasked/unrated criteria are not treated as failures. If no reviewable assessment exists, or summary generation fails, no automatic negative recommendation is created.
+L5 emphasizes independent project problem solving, relevant technical judgment, collaboration and delivery. L6 requires stronger scope, judgment and leadership beyond individual implementation; L6 expectations are not imposed on an L5 interview. Feedback distinguishes observed role-critical gaps, development areas compatible with the selected bar, and untested areas. Learn and Be Curious focuses on investigation, experimentation, validation and changed practice; a domain-knowledge mistake is not automatically a weakness in every selected criterion. Team outcomes are attributed only to the candidate's demonstrated contribution.
+
+The **종합 의견 (Summary)** card appears above the competency opinions. It gives an advisory **Inclined** or **Not Inclined**, a one-line reason, and usually three paragraphs (roughly 200–350 English words) in the selected opinion language. Borderline always maps to **Not Inclined**. A Mixed rating or limited coverage does not mechanically block Inclined: the synthesis must explain whether the actual role and level are supported and whether concerns materially undermine that conclusion. High scores do not override unresolved role-critical gaps, and future learning potential alone does not establish the bar. Unasked/unrated criteria are not treated as failures. If no reviewable assessment exists, or summary generation fails, no automatic negative recommendation is created.
 
 Summary uses the already grounded competency opinions and their question references. It does not change the scores, draw facts from example feedback, compare candidates, update an applicant's status, or execute a hiring action. The interviewer reviews the draft and makes the final decision. Summary is included in the full Markdown record; the simple Q&A download remains notes only.
 
@@ -78,7 +80,7 @@ Changing the criteria, target level, role context, language, or speaker roles cr
 
 Each generated opinion must reference actual questions in its input. If a model output omits a citation or fails validation, the next attempt receives the invalid draft and specific field errors alongside the original evidence. References are never fabricated or made optional to bypass a failed check.
 
-Shortening an already validated opinion keeps its score and question references unchanged. Paragraph length is a writing target. If the wording-only summary cannot be validated, the complete validated opinion remains available and a later retry can attempt the shorter wording again.
+Detailed feedback is retained without the former 650-character shortening step. The assessment and Summary caches are versioned separately from the transcription and question-answer notes: a reanalysis after a feedback update refreshes opinions while reusing completed source work. Previously published results remain unchanged until reanalysis succeeds. Concise Q&A notes and Korean resume comparisons retain their separate presentation formats.
 
 ## Downloads
 

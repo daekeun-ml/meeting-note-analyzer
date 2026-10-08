@@ -57,9 +57,8 @@ def markdown(document):
                       f"**{rating}: {RATINGS[rating]}**" if rating is not None else "**근거 부족 — 미평가**", ""])
         if rating is not None and assessment["evidenceStatus"] == "limited":
             lines.extend(["잠정 평가: 확인된 근거에 기반한 점수이며 평가 범위에 제한이 있습니다.", ""])
-        for sign, points in (("+", assessment["positives"]), ("-", assessment["concerns"])):
-            if points:
-                lines.extend([f"({sign}) " + " ".join(escape(point["text"]) for point in points), ""])
+        for point in assessment["positives"] + assessment["concerns"]:
+            lines.extend([escape(point["text"]), ""])
         has_opinion = bool(assessment["positives"] or assessment["concerns"])
         if not has_opinion:
             lines.extend([escape(assessment["levelAssessment"]), ""])

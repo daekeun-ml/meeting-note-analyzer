@@ -6,15 +6,15 @@ import os
 import re
 
 from .alignment import transcript_batches
-from .interview_schemas import InterviewAnswer, InterviewAssessment, AssessmentSummary, InterviewRoster, QuestionIndex, ResumeComparison, scoped_answer_schema, scoped_assessment_schema
+from .interview_schemas import InterviewAnswer, InterviewAssessment, InterviewRoster, QuestionIndex, ResumeComparison, scoped_answer_schema, scoped_assessment_schema
 from .model import Model
 from .parallel import parallel_map
 from .store import now
 from .interview_resume import read_resume
-from .interview_criteria import CRITERION_GUIDE, CRITERION_LEVEL_GUIDE, LABELS
+from .interview_criteria import CRITERION_GUIDE, CRITERION_LEVEL_GUIDE, LABELS, LEVEL_CALIBRATION, LEVEL_GUIDE
 
 VERSION = "v2"
-ASSESSMENT_VERSION = "v6"
+ASSESSMENT_VERSION = "v7"
 RESUME_REVIEW_VERSION = "v2"
 log = logging.getLogger(__name__)
 SYSTEM = """You help a human interviewer document ONE interview and review job-relevant evidence.
@@ -94,7 +94,7 @@ merely because more questions could have been asked. Use null when the competenc
 material is genuinely unusable/inconclusive, and then explain the missing evidence and focused follow-ups.
 Concerns must identify supported gaps, inaccuracies or weak tradeoffs; avoid unsupported labels or personality claims.
 Write positives and concerns as feedback paragraphs with clear evidence and level implications.
-The application supplies (+)/(-) markers, so do not include those markers in the text fields.
+The application displays each point as a narrative paragraph; do not include (+)/(-) markers or headings.
 Do not invent a negative merely to balance strengths. Do not provide hire/no-hire recommendations."""
 ASSESS_TASK += """
 If resumeComparisons are provided, treat the resume as claims to test, not a bonus. A substantiated job-relevant skill,
@@ -124,15 +124,24 @@ confidence is not evidence about competence and is not itself a reason to withho
 If an exchange says that ambiguous speech was excluded, do not turn that omission into a candidate weakness.
 Judge evidence sufficiency separately for each selected competency using the remaining attributable answers."""
 ASSESS_TASK += """
-Keep the opinion SHORT: at most ONE positive paragraph and ONE concern paragraph, each about 2–3 sentences
-(roughly 50–80 English words, or a similarly concise Korean paragraph; at most 650 characters including spaces).
-Select one or two decisive examples per paragraph. Synthesize the most important evidence;
-do not enumerate every question or resume claim. Integrate target-level implications into those two paragraphs.
-Describe related resume shortfalls together in plain language. Never put internal IDs such as r10, r27 or q3
-in narrative text; store question references only in exchangeIds. Do not repeat claim-by-claim comparisons.
-Do not manufacture a positive/concern just to fill two paragraphs: leave the corresponding list empty if unsupported.
-levelAssessment is a single short sentence for expandable detail, not another essay. followUps has at most two
-focused questions, or is empty. The same brevity applies when consolidating partial assessments."""
+Write a substantive, readable narrative: usually 3–5 paragraphs TOTAL across positives and concerns, about
+250–450 English words overall or comparable detail in Korean when enough evidence exists. This is a writing
+target, not a quota: use fewer paragraphs for thin evidence, never pad or repeat the same example.
+Each point is ONE coherent paragraph, grouping related examples around a finding. Explain the situation,
+the candidate's own actions and reasoning, the observed/reported outcome and what this demonstrates at the
+selected level. Preserve material tradeoffs, attribution and uncertainty without boilerplate caveats.
+Use up to three strengths paragraphs and two concerns paragraphs. Concerns may describe a development area
+compatible with the target bar; explicitly distinguish it from a material below-bar gap. Do not invent either
+side for balance. Do not turn this into a question-by-question inventory or a resume-claim checklist.
+Keep internal IDs out of prose; retain supporting questions only in exchangeIds. Avoid headings, bullets and
+generic praise. levelAssessment: 1–3 sentences stating whether the evidence meets the selected competency's
+target-level expectations and why remaining gaps do or do not materially affect that assessment.
+followUps has at most two focused questions, or is empty. Preserve this detail when merging partial assessments."""
+ASSESS_TASK += "\n" + LEVEL_CALIBRATION
+ASSESS_TASK += """
+For the final prose, aim for 70–110 words per paragraph and roughly 250–450 words for the WHOLE opinion.
+Select representative evidence instead of retelling every detail. Explain the level implication once; do not
+recite the rubric or repeat self-report caveats in each paragraph. Comparable detail applies in Korean."""
 
 RESUME_COMPARE_TASK = """Compare ONE professional resume claim against the supplied interview question-answer notes.
 Use opinionLanguage. Keep explanation concise, aiming for under 800 characters, while preserving the concrete evidence.
@@ -147,14 +156,6 @@ For gap, explain precisely what was claimed, what the candidate demonstrated, an
 Do not call the person dishonest or infer intent. Do not assume an interviewer hint/premise is correct, or credit a hint
 as independent candidate knowledge. Stay within job-related content. Unrelated personal attributes are never evidence.
 When combining windows, an untested window does not cancel relevant evidence elsewhere; unresolved contradictions are uncertain."""
-
-LEVEL_GUIDE = {
-    "L4": "Foundational understanding and implementation/testing of well-scoped tasks.",
-    "L5": "Independent ownership of ambiguous project requirements, design tradeoffs and operations.",
-    "L6": "Leadership of complex work, stakeholder coordination, reusable improvements and impact beyond individual delivery.",
-    "L7": "Technical direction and long-term strategy across multiple teams with sustained organizational impact.",
-}
-
 
 def evidence(segment):
     return {"segmentId": segment["id"], **{key: segment[key] for key in ("start", "end", "speaker", "text")}}
@@ -328,40 +329,6 @@ def generate_assessment(model, data, rows, comparisons, criterion, partials=None
     }}, validate=lambda value: validate_assessment(value, visible, comparisons, criterion)).model_dump()
 
 
-def concise_assessment(model, value, cache, criterion, language):
-    """Shorten existing validated opinions without asking the model to recreate scores or citations."""
-    if all(len(value[field]) <= 1 and all(len(p["text"]) <= 650 for p in value[field]) for field in ("positives", "concerns")):
-        return value
-    def validate(summary):
-        if bool(summary.positiveText) != bool(value["positives"]) or bool(summary.concernText) != bool(value["concerns"]):
-            raise ValueError("Preserve existing positive/concern categories; do not add or remove one while summarizing")
-    # Tie this presentation cache to the exact validated assessment, not just the recording/settings.
-    signature = hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
-    try:
-        summary = AssessmentSummary.model_validate(cache(f"assessment-{criterion}-{ASSESSMENT_VERSION}-summary-v1-{signature}",
-            lambda: model.generate(AssessmentSummary, """Shorten this validated interview assessment in opinionLanguage.
-Write ONE short positive paragraph and ONE short concern paragraph, aiming for 650 characters including spaces
-and roughly 50–80 English words or equivalent Korean per paragraph. Use two sentences and at most two decisive examples
-per paragraph; omit secondary examples. Keep the decisive evidence and target-level implications,
-including material resume shortfalls, but group related issues instead of listing every example.
-Preserve the original assessment's meaning, severity, uncertainty and distinction between independent answers and hints.
-Do not add evidence, change the rating, invent praise/concerns, include internal IDs, or include (+)/(-) markers.
-Use null only when the corresponding original category is empty. Scores and citations are retained by the application;
-return only positiveText and concernText.""", {"opinionLanguage": language, "assessment": value},
-                validate=validate).model_dump()))
-        validate(summary)
-    except ValueError:
-        # Presentation repair must never discard successfully grounded notes and assessment.
-        # Do not cache a fallback, so a later retry can attempt the shorter wording again.
-        log.warning("Could not shorten %s; retaining the validated assessment", criterion)
-        return value
-    result = {**value}
-    for field, text in (("positives", summary.positiveText), ("concerns", summary.concernText)):
-        refs = list(dict.fromkeys(qid for point in value[field] for qid in point["exchangeIds"]))
-        result[field] = [{"text": re.sub(r"\s+", " ", text), "exchangeIds": refs}] if text else []
-    return result
-
-
 def analyze_interview(store, check, model=None):
     record = store.record()
     settings = record["settings"]
@@ -504,8 +471,6 @@ def analyze_interview(store, check, model=None):
                     rows, comparisons, criterion if final else None, partials=parts[j:j + 2]) for j in range(0, len(parts), 2)]
             return parts[0]
         value = InterviewAssessment.model_validate(cache(f"assessment-{criterion}-{ASSESSMENT_VERSION}", build))
-        validate_assessment(value, rows, comparisons, criterion)
-        value = InterviewAssessment.model_validate(concise_assessment(model, value.model_dump(), cache, criterion, settings["opinionLanguage"]))
         validate_assessment(value, rows, comparisons, criterion)
         return {"criterion": criterion, **clean_feedback_markers(value.model_dump())}
     store.progress("assessment", 0, len(settings["criteria"]))
