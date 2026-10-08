@@ -2,17 +2,18 @@ import { z } from "zod";
 import { CONSTRAINTS, OUTPUT_LANGUAGES } from "./constants.js";
 import type { LectureAsset, LectureRecord, LectureUploadPlan } from "./lecture.js";
 
-export const INTERVIEW_CRITERIA = [
-  "domain_depth", "system_architecture",
+export const TECHNICAL_FIT_CRITERIA = ["domain_depth", "system_architecture", "technical_communication"] as const;
+export const AMAZON_LP_CRITERIA = [
   "customer_obsession", "ownership", "invent_and_simplify", "are_right_a_lot",
   "learn_and_be_curious", "hire_and_develop_the_best", "insist_on_the_highest_standards",
   "think_big", "bias_for_action", "frugality", "earn_trust", "dive_deep",
   "have_backbone_disagree_and_commit", "deliver_results",
   "strive_to_be_earths_best_employer", "success_and_scale_bring_broad_responsibility",
 ] as const;
+export const INTERVIEW_CRITERIA = [...TECHNICAL_FIT_CRITERIA, ...AMAZON_LP_CRITERIA] as const;
 export type InterviewCriterion = typeof INTERVIEW_CRITERIA[number];
 export const INTERVIEW_CRITERION_LABELS: Record<InterviewCriterion, string> = {
-  domain_depth: "Domain Depth", system_architecture: "System Architecture",
+  domain_depth: "Domain Depth", system_architecture: "System Architecture", technical_communication: "Technical Communication",
   customer_obsession: "Customer Obsession", ownership: "Ownership", invent_and_simplify: "Invent and Simplify",
   are_right_a_lot: "Are Right, A Lot", learn_and_be_curious: "Learn and Be Curious",
   hire_and_develop_the_best: "Hire and Develop the Best", insist_on_the_highest_standards: "Insist on the Highest Standards",

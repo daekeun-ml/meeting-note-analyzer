@@ -1,6 +1,7 @@
 from typing import Annotated, Literal
 from pydantic import Field, create_model
 from .schemas import Strict
+from .interview_criteria import LABELS
 
 
 class SpeakerRole(Strict):
@@ -111,4 +112,4 @@ class ResumeComparison(Strict):
     status: Literal["supported", "gap", "uncertain", "not_tested"]
     explanation: str = Field(min_length=1, max_length=4000)
     exchangeIds: list[str] = Field(max_length=12)
-    affectedCriteria: list[str] = Field(max_length=18)
+    affectedCriteria: list[str] = Field(max_length=len(LABELS))

@@ -11,7 +11,7 @@ from .model import Model
 from .parallel import parallel_map
 from .store import now
 from .interview_resume import read_resume
-from .interview_export import LABELS
+from .interview_criteria import CRITERION_GUIDE, CRITERION_LEVEL_GUIDE, LABELS
 
 VERSION = "v2"
 ASSESSMENT_VERSION = "v6"
@@ -153,10 +153,6 @@ LEVEL_GUIDE = {
     "L5": "Independent ownership of ambiguous project requirements, design tradeoffs and operations.",
     "L6": "Leadership of complex work, stakeholder coordination, reusable improvements and impact beyond individual delivery.",
     "L7": "Technical direction and long-term strategy across multiple teams with sustained organizational impact.",
-}
-CRITERION_GUIDE = {
-    "domain_depth": "Evaluate correctness and depth of domain concepts, mechanisms, assumptions, methods and domain-specific tradeoffs that were actually probed. A material misconception on a claimed foundational method is direct negative evidence. Production deployment or end-to-end architecture is not a prerequisite for a Domain Depth rating unless the supplied role-specific criterion explicitly makes it relevant.",
-    "system_architecture": "Evaluate system requirements, components and interfaces, scaling, reliability, failure handling and architectural tradeoffs that were actually probed. Do not substitute isolated algorithm knowledge for evidence about system design.",
 }
 
 
@@ -313,6 +309,8 @@ def assessment_evidence(exchanges, segments, roles, language):
 def generate_assessment(model, data, rows, comparisons, criterion, partials=None):
     """Keep the evidence contract local to each call, and preserve it when merging windows."""
     task = ASSESS_TASK
+    if data.get("criterion") == "technical_communication":
+        task += "\nFor this communication assessment, apply this specific scope to all generic technical-depth and level guidance:\n" + CRITERION_GUIDE["technical_communication"]
     if partials is None:
         visible = rows
         source = {"exchanges": rows}
@@ -468,6 +466,8 @@ def analyze_interview(store, check, model=None):
         if not reviewable:
             return {"claimId": claim["id"], "status": "uncertain", "explanation": "화자 역할을 확인한 뒤 이력서 주장을 대조해 주세요.", "exchangeIds": [], "affectedCriteria": []}
         data = {"claim": claim, "opinionLanguage": "ko", "selectedCriteria": settings["criteria"]}
+        if "technical_communication" in settings["criteria"]:
+            data["selectedCriteriaGuides"] = {key: CRITERION_GUIDE[key] for key in settings["criteria"] if key in CRITERION_GUIDE}
         def build():
             parts = [model.generate(ResumeComparison, RESUME_COMPARE_TASK, {**data, "exchanges": batch},
                                     validate=lambda v, b=batch: validate_resume_comparison(v, b, settings["criteria"])).model_dump() for batch in groups]
@@ -489,7 +489,8 @@ def analyze_interview(store, check, model=None):
             return {"criterion": criterion, "rating": None, "evidenceStatus": "limited", "positives": [], "concerns": [],
                     "levelAssessment": "Confirm the candidate/interviewer roles before assessment." if english else "후보자와 면접관의 화자 역할을 확인한 뒤 평가해 주세요.", "followUps": []}
         # A large interview is evaluated in complete note windows, then consolidated.
-        data = {"criterion": criterion, "criterionName": LABELS[criterion], "targetLevel": settings["targetLevel"], "levelGuide": LEVEL_GUIDE[settings["targetLevel"]],
+        data = {"criterion": criterion, "criterionName": LABELS[criterion], "targetLevel": settings["targetLevel"],
+                "levelGuide": CRITERION_LEVEL_GUIDE.get(criterion, LEVEL_GUIDE)[settings["targetLevel"]],
                 "criterionGuide": CRITERION_GUIDE.get(criterion, "Evaluate only observed job-related behaviors relevant to this Leadership Principle. Unasked or unrelated technical and operational dimensions are not negative evidence for this principle."),
                 "roleTitle": settings["roleTitle"], "roleContext": settings["roleContext"], "opinionLanguage": settings["opinionLanguage"],
                 "resumeClaims": resume["claims"] if resume else [], "resumeComparisons": comparison_notes}

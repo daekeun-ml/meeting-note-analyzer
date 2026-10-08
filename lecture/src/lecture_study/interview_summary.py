@@ -8,7 +8,7 @@ from typing import Literal
 from botocore.exceptions import ClientError
 from pydantic import Field, create_model
 
-from .interview_export import LABELS
+from .interview_criteria import CRITERION_GUIDE, CRITERION_LEVEL_GUIDE, LABELS
 from .schemas import Strict
 
 log = logging.getLogger(__name__)
@@ -78,6 +78,17 @@ def overall_summary(assessments, settings, level_guide, model, cache, *, reviewa
                         "positives": [p["text"] for p in a["positives"]],
                         "concerns": [p["text"] for p in a["concerns"]]} for a in observed],
     }
+    task = SUMMARY_TASK
+    if any(a["criterion"] == "technical_communication" for a in assessments):
+        data["communicationContext"] = {
+            "criterionGuide": CRITERION_GUIDE["technical_communication"],
+            "levelGuide": CRITERION_LEVEL_GUIDE["technical_communication"][settings["targetLevel"]],
+        }
+        if all(a["criterion"] == "technical_communication" for a in observed):
+            data["levelGuide"] = data["communicationContext"]["levelGuide"]
+        task += ("\nKeep Technical Communication separate from domain knowledge and architecture. "
+                 "Its strengths/gaps concern audience adaptation, shared understanding and stakeholder alignment; "
+                 "do not reinterpret its rating as a domain-depth rating or penalize unasked technical dimensions.")
     signature = hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:20]
 
     def validate(value):
@@ -90,7 +101,7 @@ def overall_summary(assessments, settings, level_guide, model, cache, *, reviewa
 
     try:
         value = schema.model_validate(cache(f"overall-summary-{SUMMARY_VERSION}-{signature}",
-            lambda: model.generate(schema, SUMMARY_TASK, data, validate=validate).model_dump()))
+            lambda: model.generate(schema, task, data, validate=validate).model_dump()))
         validate(value)
     except (ValueError, ClientError):
         # A model/format problem is never a reason to recommend against a candidate or discard completed notes.

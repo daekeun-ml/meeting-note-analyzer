@@ -1,17 +1,6 @@
 """Readable interview Markdown; generated assessment stays separate from recorded notes."""
 import re
-
-LABELS = {
-    "domain_depth": "Domain Depth", "system_architecture": "System Architecture",
-    "customer_obsession": "Customer Obsession", "ownership": "Ownership",
-    "invent_and_simplify": "Invent and Simplify", "are_right_a_lot": "Are Right, A Lot",
-    "learn_and_be_curious": "Learn and Be Curious", "hire_and_develop_the_best": "Hire and Develop the Best",
-    "insist_on_the_highest_standards": "Insist on the Highest Standards", "think_big": "Think Big",
-    "bias_for_action": "Bias for Action", "frugality": "Frugality", "earn_trust": "Earn Trust",
-    "dive_deep": "Dive Deep", "have_backbone_disagree_and_commit": "Have Backbone; Disagree and Commit",
-    "deliver_results": "Deliver Results", "strive_to_be_earths_best_employer": "Strive to be Earth’s Best Employer",
-    "success_and_scale_bring_broad_responsibility": "Success and Scale Bring Broad Responsibility",
-}
+from .interview_criteria import LABELS
 RATINGS = {1: "Concern", 2: "Mild Concern", 3: "Mixed", 4: "Mild Strength", 5: "Strength"}
 
 

@@ -1,4 +1,4 @@
-import { DEFAULT_INTERVIEW_ROLE, INTERVIEW_CRITERIA, INTERVIEW_CRITERION_LABELS, INTERVIEW_LEVELS, INTERVIEW_LEVEL_GUIDANCE, type InterviewSettings as Settings } from "@meeting-notes/shared";
+import { AMAZON_LP_CRITERIA, DEFAULT_INTERVIEW_ROLE, TECHNICAL_FIT_CRITERIA, INTERVIEW_CRITERION_LABELS, INTERVIEW_LEVELS, INTERVIEW_LEVEL_GUIDANCE, type InterviewSettings as Settings } from "@meeting-notes/shared";
 import { SectionLabel, Segmented } from "./ui";
 import { useState } from "react";
 
@@ -17,7 +17,9 @@ export function InterviewSettingsForm({ value, onChange }: { value: Settings; on
     <label className="block"><SectionLabel>목표 레벨</SectionLabel><select aria-label="목표 레벨" value={value.targetLevel} onChange={(e) => update({ targetLevel: e.target.value as Settings["targetLevel"] })} className={interviewInputClass}>{INTERVIEW_LEVELS.map((level) => <option key={level}>{level}</option>)}</select></label>
     <p className="text-xs text-ink-3 leading-relaxed">{INTERVIEW_LEVEL_GUIDANCE[value.targetLevel]}를 살펴봅니다. 공식 직무별 평가 기준이 아닌 참고 가이드이며, 별도 기준은 아래에 입력할 수 있습니다.</p>
     {(["Technical Fit", "Amazon LP"] as const).map((group) => <fieldset key={group}><legend className="text-sm font-semibold mb-2">{group} <span className="font-normal text-xs text-ink-3">복수 선택</span></legend>
-      <div className="grid gap-2">{INTERVIEW_CRITERIA.filter((id, i) => group === "Technical Fit" ? i < 2 : i >= 2 && (allPrinciples || !EXTRA_LPS.has(id))).map((id) => <label key={id} className={`flex gap-3 items-center rounded-xl border p-3 text-sm cursor-pointer ${value.criteria.includes(id) ? "border-accent/60 bg-accent-soft" : "border-line bg-surface"}`}><input type="checkbox" checked={value.criteria.includes(id)} onChange={() => toggle(id)} /><span>{INTERVIEW_CRITERION_LABELS[id]}</span></label>)}</div>
+      <div className="grid gap-2">{(group === "Technical Fit" ? TECHNICAL_FIT_CRITERIA : AMAZON_LP_CRITERIA.filter((id) => allPrinciples || !EXTRA_LPS.has(id))).map((id) => <label key={id} className={`flex gap-3 items-center rounded-xl border p-3 text-sm cursor-pointer ${value.criteria.includes(id) ? "border-accent/60 bg-accent-soft" : "border-line bg-surface"}`}><input type="checkbox" aria-label={INTERVIEW_CRITERION_LABELS[id]} checked={value.criteria.includes(id)} onChange={() => toggle(id)} /><span>{INTERVIEW_CRITERION_LABELS[id]}
+        {id === "technical_communication" && <span className="block mt-1 text-xs font-normal leading-relaxed text-ink-3">기술 지식의 깊이보다, 비전공자·경영진·유관부서 등 상대에 맞게 설명하고 이해를 확인하며 협업과 의사결정을 이끄는 역량</span>}
+      </span></label>)}</div>
       {group === "Amazon LP" && !allPrinciples && <button type="button" onClick={() => setAllPrinciples(true)} className="tap mt-2 text-xs text-accent underline">Frugality · Earth’s Best Employer · Success and Scale도 표시</button>}
     </fieldset>)}
     {!value.criteria.length && <p className="text-xs text-danger">평가할 항목을 하나 이상 선택하세요.</p>}

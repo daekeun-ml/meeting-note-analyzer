@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { createInterviewSchema, interviewSettingsSchema, type InterviewRecord } from "@meeting-notes/shared";
+import { createInterviewSchema, interviewSettingsSchema, INTERVIEW_CRITERIA, type InterviewRecord } from "@meeting-notes/shared";
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), claim: vi.fn(), release: vi.fn(), multipart: vi.fn(), abort: vi.fn(), complete: vi.fn(), send: vi.fn(), s3: vi.fn(), sign: vi.fn(), read: vi.fn(), remove: vi.fn(), start: vi.fn() }));
 vi.mock("@meeting-notes/backend", async (original) => ({ ...await original<typeof import("@meeting-notes/backend")>(),
@@ -25,6 +25,16 @@ it("accepts multiple tech/LP criteria and one target level, rejects duplicates, 
     expect(interviewSettingsSchema.safeParse(input).success).toBe(false);
   }
   expect(createInterviewSchema.safeParse({ title: "Interview", settings, audio: { fileName: "a.mp4", fileSize: 100, contentType: "audio/mpeg" } }).success).toBe(false);
+});
+it("accepts Technical Communication alongside other criteria and persists the selection", async () => {
+  const selected = interviewSettingsSchema.parse({ criteria: ["domain_depth", "technical_communication", "earn_trust"], targetLevel: "L6" });
+  const result = await createInterview({ sub: "alice" }, createInterviewSchema.parse({
+    title: "Stakeholder communication", settings: selected, audio: { fileName: "a.mp3", fileSize: 100, contentType: "audio/mpeg" },
+  }));
+  expect(mocks.claim.mock.calls[0]![2].Put.Item.settings.criteria).toEqual(selected.criteria);
+  expect(result.interview.settings.criteria).toEqual(selected.criteria);
+  expect(interviewSettingsSchema.parse({ criteria: [...INTERVIEW_CRITERIA] }).criteria).toHaveLength(19);
+  expect(interviewSettingsSchema.safeParse({ criteria: ["technical_communication", "technical_communication"] }).success).toBe(false);
 });
 it("uses the interview table, quota and private upload prefix, then completes audio before starting", async () => {
   const created = await createInterview({ sub: "alice" }, createInterviewSchema.parse({ title: "Interview", settings, audio: { fileName: "a.mp3", fileSize: 100, contentType: "audio/mpeg" } }));

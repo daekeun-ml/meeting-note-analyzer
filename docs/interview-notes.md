@@ -8,7 +8,7 @@ Open **인터뷰 → 새 인터뷰**, or select **인터뷰** on the upload page
 | --- | --- |
 | Recording | MP3, up to 500 MiB and 4 hours |
 | Optional resume | PDF, up to 20 MiB and 20 pages, without a password |
-| Technical Fit | Domain Depth, System Architecture |
+| Technical Fit | Domain Depth, System Architecture, Technical Communication |
 | Leadership Principles | All 16; the initial list shows 13, with Frugality, Strive to be Earth’s Best Employer, and Success and Scale Bring Broad Responsibility available through the expand button |
 | Target level | One of L4, L5, L6, L7 |
 | Notes language | Korean, English, or recording language; Korean by default |
@@ -16,6 +16,18 @@ Open **인터뷰 → 새 인터뷰**, or select **인터뷰** on the upload page
 | Optional context | Role title (default: AI Specialist Solutions Architect), role-specific expectations, and a separate interviewer memo |
 
 The level guide is a working reference, not Amazon's official role-specific rubric. Enter the expectations for the actual role in **직무별 기대 수준·평가 기준**.
+
+**Technical Communication** evaluates effective communication with stakeholders, non-specialists, C-level executives,
+partner departments and internal collaborators. Evidence includes adapting terminology and detail to the audience,
+explaining business impact and options, listening and checking understanding, resolving disagreements, and making
+decisions and follow-up actions clear. It is separate from Domain Depth: neither deep algorithm knowledge nor fluent
+delivery alone establishes communication effectiveness. Concrete communication examples and their outcomes matter;
+unasked audience scenarios, accent and personality are not scoring evidence.
+
+Its level guide progresses from clear team communication at L4, to independent project stakeholder alignment at L5,
+cross-functional and executive decision communication at L6, and durable alignment across organizations at L7.
+These are working expectations, not official Amazon criteria. The criterion can be selected together with other
+Technical Fit items and LPs in both new interviews and the existing interview settings editor.
 
 ## Notes and opinions
 
