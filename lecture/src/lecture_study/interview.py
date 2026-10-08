@@ -14,7 +14,7 @@ from .interview_resume import read_resume
 from .interview_criteria import CRITERION_GUIDE, CRITERION_LEVEL_GUIDE, LABELS, LEVEL_CALIBRATION, LEVEL_GUIDE
 
 VERSION = "v2"
-ASSESSMENT_VERSION = "v7"
+ASSESSMENT_VERSION = "v8"
 RESUME_REVIEW_VERSION = "v2"
 log = logging.getLogger(__name__)
 SYSTEM = """You help a human interviewer document ONE interview and review job-relevant evidence.
@@ -74,6 +74,9 @@ Assess against targetLevel, roleTitle, roleContext and the supplied working leve
 Amazon role-specific standards. Assess the selected dimension, not the person's general worth or hireability.
 Distinguish independent answers from answers following hints, self-reported experience from demonstrated reasoning,
 and the candidate's own work from team achievements. Do not assume the interviewer's technical premise is correct.
+Missing measurement or feedback means the interview did not establish it, not that it never happened.
+Do not invent the candidate's intent, stakeholder understanding or a successful outcome from missing information.
+Report attribution and qualifications factually; do not turn them into judgments of honesty or character.
 A missing example is an evidence gap, not proof the candidate cannot do it. Never penalize an unasked competency.
 Do not import experiences from sample feedback (FSDP, TP/CP, prompt rollback, etc.) unless actually present here.
 Ratings: 1 Concern, 2 Mild Concern, 3 Mixed, 4 Mild Strength, 5 Strength.

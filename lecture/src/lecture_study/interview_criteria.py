@@ -31,6 +31,11 @@ handles disagreement constructively; and makes decisions, responsibilities and f
 Prefer concrete examples identifying the audience, the candidate's communication choices, feedback and outcome.
 Observable interview explanations are evidence of those specific communication behaviors; reported project
 interactions remain self-reported. Do not invent stakeholder success or infer it from a fluent interview answer.
+Plain language is useful only when it conveys the relevant meaning or enables a decision. Calling a replacement
+"a better model" without explaining its implications does not by itself demonstrate successful audience adaptation.
+Separate an accessible part of an explanation from parts that remain jargon-heavy or omit the decision tradeoff.
+No reported misunderstanding is not evidence that understanding was achieved. If audience feedback or outcome was
+not established, say so without assuming either success or failure, and weigh the concrete behaviors observed.
 Assess communication effectiveness, NOT Domain Depth or System Architecture. A failed algorithm question alone
 is not a communication weakness; a technically strong answer alone is not communication strength. Technical
 accuracy matters here when a specific communication example misleads its audience or obscures a decision.

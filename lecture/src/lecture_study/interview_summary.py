@@ -12,7 +12,7 @@ from .interview_criteria import CRITERION_GUIDE, CRITERION_LEVEL_GUIDE, LABELS, 
 from .schemas import Strict
 
 log = logging.getLogger(__name__)
-SUMMARY_VERSION = "v2"
+SUMMARY_VERSION = "v3"
 
 
 class OverallSummaryDraft(Strict):
@@ -46,6 +46,8 @@ If recommending Inclined, establish the already demonstrated capabilities, addre
 explain why it does not materially prevent target-level performance. Future potential alone is insufficient.
 Separate hands-on exposure from explanatory depth, experiments from production ownership, and independent reasoning
 from interviewer-supplied hints. Preserve uncertainty and self-report qualifiers; do not infer inability from missing data.
+Do not treat the absence of reported misunderstanding as proof of effective communication, or an unestablished
+measurement as proof it never occurred. Do not add intent, outcomes or character judgments to the supplied evidence.
 If the assessments describe a tested resume shortfall, summarize it without repeating resume claim IDs.
 reason: ONE short clause explaining the inclination, e.g. 'based on ...' in English. Do NOT include the decision label.
 rationale: usually THREE coherent paragraphs separated by blank lines, about 200–350 English words overall
