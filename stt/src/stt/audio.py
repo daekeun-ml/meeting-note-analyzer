@@ -59,8 +59,11 @@ def estimate_noise_floor(source: Path) -> float:
                 if mean_power <= 1e-16:
                     continue
                 flatness = float(np.exp(np.log(np.maximum(spectrum, 1e-20)).mean()) / mean_power)
-                # Voiced speech has spectral peaks. Do not learn it as a noise profile.
-                if flatness >= .45:
+                # MP3 quantization creates spectral holes even in stationary white noise
+                # (typically ~0.35 flatness after decoding, versus ~0.55 in PCM).
+                # Voiced speech remains strongly peaked; the lower level percentile
+                # and the 6 dB reduction cap further limit speech attenuation.
+                if flatness >= .30:
                     rms = math.sqrt(2 * float(spectrum.sum()) / (frame_size * float((window ** 2).sum())))
                     levels.append(20 * math.log10(max(rms, 1e-10)))
     return max(-80.0, min(-25.0, float(np.percentile(levels, 20)))) if len(levels) >= 3 else -80.0

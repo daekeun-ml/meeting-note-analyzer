@@ -7,12 +7,13 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from stt.audio import denoise_wav, export_mp3, export_video, probe_duration
+from stt.audio import denoise_wav, estimate_noise_floor, export_mp3, export_video, probe_duration, to_wav16k
 
 pytestmark = pytest.mark.skipif(not shutil.which("ffmpeg") or not shutil.which("ffprobe"), reason="ffmpeg and ffprobe required")
 
 
-def test_fft_reduces_stationary_noise_without_shortening_or_overwriting_audio(tmp_path):
+@pytest.mark.parametrize("compressed", [False, True])
+def test_fft_reduces_stationary_noise_without_shortening_or_overwriting_audio(tmp_path, compressed):
     rate = 16000
     t = np.arange(rate * 6) / rate
     speech = .22 * np.sin(2 * np.pi * 220 * t) + .08 * np.sin(2 * np.pi * 660 * t)
@@ -20,7 +21,11 @@ def test_fft_reduces_stationary_noise_without_shortening_or_overwriting_audio(tm
     noise = np.random.default_rng(42).normal(0, .035, t.shape)
     source, target = tmp_path / "original.wav", tmp_path / "filtered.wav"
     sf.write(source, speech + noise, rate, subtype="PCM_16")
+    if compressed:
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(source), "-c:a", "libmp3lame", "-b:a", "128k", str(tmp_path / "source.mp3")], check=True)
+        to_wav16k(tmp_path / "source.mp3", source)
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    assert -40 < estimate_noise_floor(source) < -25
     denoise_wav(source, target)
     filtered, actual_rate = sf.read(target)
     assert actual_rate == rate and len(filtered) == len(t)
@@ -31,6 +36,14 @@ def test_fft_reduces_stationary_noise_without_shortening_or_overwriting_audio(tm
     assert hashlib.sha256(source.read_bytes()).hexdigest() == digest
     export_mp3(target, tmp_path / "processed.mp3", 1.25, 4.25)
     assert abs(probe_duration(tmp_path / "processed.mp3") - 3) < .2
+
+
+def test_clean_voiced_audio_does_not_become_a_noise_profile(tmp_path):
+    rate = 16000
+    time = np.arange(rate * 4) / rate
+    source = tmp_path / "clean.wav"
+    sf.write(source, .3 * np.sin(2 * np.pi * 220 * time) + .1 * np.sin(2 * np.pi * 660 * time), rate)
+    assert estimate_noise_floor(source) == -80
 
 
 def test_mp4_keeps_video_codec_and_aligns_the_processed_audio_to_an_earlier_keyframe(tmp_path):
