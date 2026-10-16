@@ -5,9 +5,13 @@ set -euo pipefail
 VARIANT="${1:-large}"
 REGION="${AWS_REGION:-us-east-1}"
 PROJECT="${STT_PUBLISHER_PROJECT:-meeting-analyzer-stt-model-publisher}"
-BUILD_ID=$(aws codebuild start-build --project-name "$PROJECT" --region "$REGION" \
-  --environment-variables-override name=MODEL_VARIANT,value="$VARIANT",type=PLAINTEXT \
-  --query 'build.id' --output text)
+if [[ -n "${STT_PUBLISHER_BUILD_INPUT:-}" ]]; then
+  BUILD_ID=$(aws codebuild start-build --region "$REGION" --cli-input-json "file://$STT_PUBLISHER_BUILD_INPUT" --query 'build.id' --output text)
+else
+  BUILD_ID=$(aws codebuild start-build --project-name "$PROJECT" --region "$REGION" \
+    --environment-variables-override name=MODEL_VARIANT,value="$VARIANT",type=PLAINTEXT \
+    --query 'build.id' --output text)
+fi
 echo "started $BUILD_ID (variant=$VARIANT)"
 while true; do
   STATUS=$(aws codebuild batch-get-builds --ids "$BUILD_ID" --region "$REGION" --query 'builds[0].buildStatus' --output text)

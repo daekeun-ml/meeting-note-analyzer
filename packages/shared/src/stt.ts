@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { audioProcessingReportSchema } from "./audio-processing.js";
+import { speechModelsSchema } from "./speech-models.js";
 
 /** Namespace shared by the SageMaker inference ID and SNS message-body filters. */
 export const LECTURE_INFERENCE_PREFIX = "lecture-";
@@ -39,6 +40,7 @@ export const sttOutputSchema = z.object({
   stats: z.record(z.unknown()).default({}),
   originalSegments: z.array(sttSegmentSchema).optional(),
   processing: audioProcessingReportSchema.optional(),
+  speechModels: speechModelsSchema.optional(),
 });
 export type SttOutput = z.infer<typeof sttOutputSchema>;
 export type SttSegment = z.infer<typeof sttSegmentSchema>;

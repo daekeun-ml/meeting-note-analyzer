@@ -142,6 +142,8 @@ export class LectureStack extends Stack {
     lambdaErrorsAlarm(this, "LectureCallbackErrors", callback, props.alarmTopic, "Lecture STT callback failed");
     const api = nodeFn(this, "Api", { entry: "services/api/src/handlers/lectures.ts", environment: { LECTURE_TABLE_NAME: table.tableName, DATA_BUCKET: dataBucket.bucketName, UPLOAD_BASE_URL: config.siteUrl, LECTURE_STATE_MACHINE_ARN: machine.stateMachineArn }, timeout: Duration.seconds(29), memorySize: 1024 });
     table.grantReadWriteData(api);
+    api.addEnvironment("SPEECH_PREFERENCES_TABLE_NAME", props.table.tableName);
+    api.addToRolePolicy(new iam.PolicyStatement({ actions: ["dynamodb:GetItem"], resources: [props.table.tableArn] }));
     dataBucket.grantPut(api, "stt/deleted/lecture/*");
     for (const prefix of ["lecture-uploads/*", "lecture-results/*"]) { dataBucket.grantReadWrite(api, prefix); dataBucket.grantDelete(api, prefix); }
     machine.grantStartExecution(api);

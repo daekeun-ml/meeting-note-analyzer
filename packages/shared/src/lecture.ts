@@ -3,6 +3,7 @@ import { CONSTRAINTS, OUTPUT_LANGUAGES, type OutputLanguage } from "./constants.
 import type { UploadPartTarget } from "./meeting.js";
 import { lecturePreferencesSchema, type LecturePreferences } from "./lecture-preferences.js";
 import { audioProcessingOptionsSchema, type AudioProcessingOptions, type AudioProcessingReport, type ProcessedMediaLinks } from "./audio-processing.js";
+import { speechModelsSchema, type SpeechModels } from "./speech-models.js";
 
 export const LECTURE_LIMITS = { maxVideoBytes: 4 * 1024 ** 3, maxAudioBytes: CONSTRAINTS.maxUploadBytes, maxSlidesBytes: 100 * 1024 * 1024, maxPages: 120, maxVideoScenes: 240, maxResultPages: 360, maxActive: 3, uploadExpirySec: 4 * 3600, maxCustomPromptChars: 2000 } as const;
 export const SLIDE_TYPES = { pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation", pdf: "application/pdf" } as const;
@@ -41,6 +42,7 @@ export const createLectureSchema = z.object({
   slideRange: slideRangeSchema,
   preferences: lecturePreferencesSchema.optional(),
   audioProcessing: audioProcessingOptionsSchema.optional(),
+  speechModels: speechModelsSchema.optional(),
   outputLanguage: z.enum(OUTPUT_LANGUAGES).default("ko"),
   languageHint: z.enum(["ko", "en", "ja", "zh", "auto"]).default("auto"),
   video: file.extend({ fileSize: z.number().int().positive().max(LECTURE_LIMITS.maxVideoBytes), contentType: z.literal("video/mp4") })
@@ -59,6 +61,8 @@ export interface LectureRecord {
   customPrompt?: string;
   preferences?: LecturePreferences;
   audioProcessing?: AudioProcessingOptions;
+  speechModels?: SpeechModels;
+  transcriptSpeechModels?: SpeechModels;
   processing?: AudioProcessingReport;
   originalTranscriptKey?: string;
   slideRange?: string;

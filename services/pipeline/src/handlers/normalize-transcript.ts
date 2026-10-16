@@ -1,11 +1,12 @@
 import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { env, s3 } from "@meeting-notes/backend";
 import { processingDeletionKey, processingSummary, s3Keys, sttOutputSchema, validProcessedMediaKey, type AudioProcessingReport, type SttOutput, type Transcript } from "@meeting-notes/shared";
+import { LEGACY_SPEECH_MODELS, sameSpeechModels, type SpeechModels } from "@meeting-notes/shared";
 import { setStage, updateMeeting } from "../lib/meeting-updates.js";
 import { parseS3Uri } from "../lib/s3-uri.js";
 import { transcriptToMarkdown } from "../lib/transcript-format.js";
 
-export interface NormalizeInput { meetingId: string; title: string; outputLocation?: string | null; skipped?: boolean; transcriptKey?: string | null }
+export interface NormalizeInput { meetingId: string; title: string; outputLocation?: string | null; skipped?: boolean; transcriptKey?: string | null; speechModels?: SpeechModels }
 
 /** Sorts segments, guarantees stable ids, and recomputes speaker talk time. Pure; exported for tests. */
 export function normalize(raw: SttOutput, now = new Date()): Transcript {
@@ -66,8 +67,11 @@ export function validateProcessing(raw: SttOutput, kind: AudioProcessingReport["
 }
 
 /** Keep raw STT separately; analysis keeps original segment IDs and recording timestamps. */
-export async function persistTranscripts(raw: SttOutput, key: string, kind: AudioProcessingReport["kind"], id: string) {
+export async function persistTranscripts(raw: SttOutput, key: string, kind: AudioProcessingReport["kind"], id: string, expectedModels?: SpeechModels) {
   validateProcessing(raw, kind, id);
+  if (raw.model !== "silent-video" && expectedModels && !sameSpeechModels(expectedModels, raw.speechModels ?? LEGACY_SPEECH_MODELS)) {
+    throw new Error("Transcript was produced by a different speech model selection");
+  }
   async function checkActive() {
     if (!raw.processing) return;
     try { await s3.send(new HeadObjectCommand({ Bucket: env.dataBucket, Key: processingDeletionKey(kind, id) })); }
@@ -109,13 +113,14 @@ export const handler = async (input: NormalizeInput) => {
   const raw = sttOutputSchema.parse(JSON.parse(text));
   assertSpeech(normalize(raw));
   const transcriptKey = s3Keys.transcriptJson(input.meetingId);
-  const { transcript, originalTranscriptKey, processing } = await persistTranscripts(raw, transcriptKey, "meeting", input.meetingId);
+  const { transcript, originalTranscriptKey, processing } = await persistTranscripts(raw, transcriptKey, "meeting", input.meetingId, input.speechModels);
   await s3.send(new PutObjectCommand({ Bucket: env.dataBucket, Key: s3Keys.transcriptMd(input.meetingId), Body: transcriptToMarkdown(transcript, input.title), ContentType: "text/markdown; charset=utf-8" }));
   await setStage(input.meetingId, "stt", "COMPLETED", { s3Key: transcriptKey });
   await updateMeeting(input.meetingId, {
     status: "ANALYZING",
     transcriptKey,
     originalTranscriptKey, processing,
+    transcriptSpeechModels: raw.speechModels ?? LEGACY_SPEECH_MODELS,
     durationSec: transcript.durationSec,
     detectedLanguage: transcript.language ?? undefined,
     speakerCount: transcript.speakers.length,

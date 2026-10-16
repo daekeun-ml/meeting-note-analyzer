@@ -1,5 +1,6 @@
 import { DEFAULT_AUDIO_PROCESSING } from "@meeting-notes/shared";
 import { AudioProcessingSettings } from "../components/AudioProcessingSettings";
+import { UploadSpeechModels, useSpeechModelChoice } from "../components/SpeechModels";
 import { useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -47,6 +48,8 @@ function MeetingUploadForm() {
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const busy = progress !== null;
+  const speech = useSpeechModelChoice(busy);
+  const speechLanguage = speech.value.stt === "ark-asr" ? "en" : hint;
 
   const isMp3 = (f: File) => f.type === "audio/mpeg" || /\.mp3$/i.test(f.name);
 
@@ -59,11 +62,11 @@ function MeetingUploadForm() {
   }
 
   async function submit() {
-    if (!file) return;
+    if (!file || speech.loading) return;
     setError(null);
     try {
       setProgress(0);
-      const res = await api.createMeeting({ title: title.trim() || undefined, fileName: file.name, fileSize: file.size, contentType: "audio/mpeg", outputLanguage: lang, audioProcessing, languageHint: hint === "auto" ? undefined : hint });
+      const res = await api.createMeeting({ title: title.trim() || undefined, fileName: file.name, fileSize: file.size, contentType: "audio/mpeg", outputLanguage: lang, audioProcessing, speechModels: speech.value, languageHint: speechLanguage === "auto" ? undefined : speechLanguage });
       const parts = await uploadMultipart(file, res.upload, setProgress);
       await api.completeUpload(res.meeting.meetingId, { uploadId: res.upload.uploadId, parts });
       await qc.invalidateQueries({ queryKey: ["meetings"] });
@@ -80,6 +83,7 @@ function MeetingUploadForm() {
         icon={<IconFileAudio className="text-accent" />} buttonLabel="mp3 파일 선택" hint="MP3 · 최대 500MB, 여러 언어가 섞인 회의도 됩니다" />
 
       <AudioProcessingSettings value={audioProcessing} onChange={setAudioProcessing} disabled={busy} />
+      <UploadSpeechModels choice={speech} disabled={busy} />
       <div className="mt-6">
         <SectionLabel>제목</SectionLabel>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 9월 첫째 주 주간회의" disabled={busy} className="mt-2 w-full h-12 rounded-xl bg-surface border border-line px-4 text-[16px] placeholder:text-ink-3 focus:outline-none focus:border-accent" />
@@ -91,8 +95,8 @@ function MeetingUploadForm() {
       </div>
       <div className="mt-5">
         <div className="flex items-center gap-1.5"><IconLanguage size={14} className="text-ink-3" /><SectionLabel>회의에서 쓰인 언어</SectionLabel></div>
-        <Segmented className="mt-2" options={HINT_OPTIONS} value={hint} onChange={setHint} />
-        <p className="mt-2 text-[12px] text-ink-3">자동 감지가 기본입니다. 힌트를 주면 전사 정확도가 올라갑니다.</p>
+        <Segmented className="mt-2" options={speech.value.stt === "ark-asr" ? HINT_OPTIONS.filter((option) => option.value === "en") : HINT_OPTIONS} value={speechLanguage} onChange={setHint} />
+        <p className="mt-2 text-[12px] text-ink-3">{speech.value.stt === "ark-asr" ? "ARK는 영어 녹음용으로 사용합니다." : "자동 감지가 기본입니다. 힌트를 주면 전사 정확도가 올라갑니다."}</p>
       </div>
 
       {busy && (
@@ -102,7 +106,7 @@ function MeetingUploadForm() {
         </div>
       )}
       {error && <InlineError>{error}</InlineError>}
-      <Button full className="mt-6" loading={busy} disabled={!file} onClick={() => void submit()}>분석 시작</Button>
+      <Button full className="mt-6" loading={busy} disabled={!file || speech.loading} onClick={() => void submit()}>분석 시작</Button>
       <p className="mt-3 text-[12px] text-ink-3 leading-relaxed">업로드가 끝나면 앱을 닫아도 됩니다. 처리가 끝나면 알림으로 알려 드립니다(설정에서 알림 켜기).</p>
     </>
   );

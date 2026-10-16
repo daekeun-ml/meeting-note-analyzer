@@ -3,27 +3,30 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const auth = vi.hoisted(() => ({ user: { profile: { email: "user@example.test", sub: "u1", name: "User" } }, revokeTokens: vi.fn(), removeUser: vi.fn() }));
 const navigateTo = vi.hoisted(() => vi.fn());
 vi.mock("react-oidc-context", () => ({ useAuth: () => auth }));
-const preferences = vi.hoisted(() => ({ getLecturePreferences: vi.fn(), saveLecturePreferences: vi.fn() }));
+const preferences = vi.hoisted(() => ({ getLecturePreferences: vi.fn(), saveLecturePreferences: vi.fn(), getSpeechPreferences: vi.fn(), saveSpeechPreferences: vi.fn() }));
 vi.mock("../api", () => ({ useApi: () => preferences }));
 vi.mock("../use-config", () => ({ useConfig: () => ({ cognitoDomain: "https://auth.example.test", cognitoClientId: "client-1" }) }));
 vi.mock("../push", () => ({ currentSubscription: async () => null, enablePush: vi.fn(), disablePush: vi.fn(), isIos: () => false, isStandalone: () => false, pushSupported: () => false }));
 vi.mock("../navigation", () => ({ navigateTo }));
 import { SettingsPage } from "../../pages/SettingsPage";
 
-let root: Root; let element: HTMLDivElement;
+let root: Root; let element: HTMLDivElement; let client: QueryClient;
 beforeEach(() => {
   vi.resetAllMocks();
   preferences.getLecturePreferences.mockResolvedValue({ model: "balanced", format: "structured", tone: "plain", detail: "standard" });
+  preferences.getSpeechPreferences.mockResolvedValue({ stt: "qwen3-asr", diarization: "nemotron3" });
+  client = new QueryClient();
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   auth.revokeTokens.mockResolvedValue(undefined); auth.removeUser.mockResolvedValue(undefined);
   element = document.createElement("div"); document.body.appendChild(element); root = createRoot(element);
 });
-afterEach(async () => { await act(async () => root.unmount()); element.remove(); });
-async function render() { await act(async () => root.render(<MemoryRouter><SettingsPage /></MemoryRouter>)); }
+afterEach(async () => { await act(async () => root.unmount()); element.remove(); client.clear(); });
+async function render() { await act(async () => root.render(<QueryClientProvider client={client}><MemoryRouter><SettingsPage /></MemoryRouter></QueryClientProvider>)); }
 const logoutButton = () => [...element.querySelectorAll("button")].find((b) => b.textContent?.includes("로그아웃"))!;
 const logoutUrl = `https://auth.example.test/logout?client_id=client-1&logout_uri=${encodeURIComponent(`${window.location.origin}/`)}`;
 
@@ -54,4 +57,21 @@ it("loads and saves account lecture defaults without starting any analysis", asy
   await act(async () => [...element.querySelectorAll("button")].find((button) => button.textContent === "강의 설정 저장")!.click());
   expect(preferences.saveLecturePreferences).toHaveBeenCalledWith(expected);
   expect(element.textContent).toContain("강의 기본 설정을 저장했습니다.");
+});
+
+it("shows the requested speech defaults and saves an allowed alternative", async () => {
+  await render();
+  await act(async () => { await vi.waitFor(() => expect(element.querySelector<HTMLSelectElement>('select[aria-label="음성 인식 모델"]')?.disabled).toBe(false)); });
+  const stt = element.querySelector<HTMLSelectElement>('select[aria-label="음성 인식 모델"]')!;
+  const diarization = element.querySelector<HTMLSelectElement>('select[aria-label="화자 분리 모델"]')!;
+  expect(stt.value).toBe("qwen3-asr");
+  expect(diarization.value).toBe("nemotron3");
+  expect([...stt.options].map((option) => option.value)).toEqual(["qwen3-asr", "crisperwhisper", "ark-asr"]);
+  await act(async () => { stt.value = "ark-asr"; stt.dispatchEvent(new Event("change", { bubbles: true })); });
+  await act(async () => { diarization.value = "community1"; diarization.dispatchEvent(new Event("change", { bubbles: true })); });
+  const expected = { stt: "ark-asr", diarization: "community1" };
+  preferences.saveSpeechPreferences.mockResolvedValue(expected);
+  await act(async () => [...element.querySelectorAll("button")].find((button) => button.textContent === "음성 모델 설정 저장")!.click());
+  expect(preferences.saveSpeechPreferences).toHaveBeenCalledWith(expected);
+  expect(element.textContent).toContain("음성 모델 기본 설정을 저장했습니다.");
 });

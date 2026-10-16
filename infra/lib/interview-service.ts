@@ -80,6 +80,8 @@ export class InterviewService extends Construct {
         UPLOAD_BASE_URL: props.config.siteUrl, INTERVIEW_STATE_MACHINE_ARN: machine.stateMachineArn },
     });
     props.table.grantReadWriteData(api);
+    api.addEnvironment("SPEECH_PREFERENCES_TABLE_NAME", props.pushTable.tableName);
+    api.addToRolePolicy(new iam.PolicyStatement({ actions: ["dynamodb:GetItem"], resources: [props.pushTable.tableArn] }));
     props.dataBucket.grantPut(api, "stt/deleted/interview/*");
     for (const prefix of ["interview-uploads/*", "interview-results/*"]) props.dataBucket.grantReadWrite(api, prefix);
     machine.grantStartExecution(api);

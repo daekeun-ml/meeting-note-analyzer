@@ -35,6 +35,8 @@ export function createApi(base: string, getToken: () => string | undefined, rene
   return {
     getLecturePreferences: () => call<import("@meeting-notes/shared").LecturePreferences>("GET", "/lecture-preferences"),
     saveLecturePreferences: (value: import("@meeting-notes/shared").LecturePreferences) => call<import("@meeting-notes/shared").LecturePreferences>("PUT", "/lecture-preferences", value),
+    getSpeechPreferences: () => call<import("@meeting-notes/shared").SpeechModels>("GET", "/speech-preferences"),
+    saveSpeechPreferences: (value: import("@meeting-notes/shared").SpeechModels) => call<import("@meeting-notes/shared").SpeechModels>("PUT", "/speech-preferences", value),
     createInterview: (input: CreateInterviewRequest) => call<CreateInterviewResponse>("POST", "/interviews", input),
     completeInterviewUpload: (id: string, input: CompleteInterviewUpload) => call<void>("POST", `/interviews/${encodeURIComponent(id)}/complete-upload`, input),
     startInterview: (id: string) => call<void>("POST", `/interviews/${encodeURIComponent(id)}/start`),

@@ -8,6 +8,7 @@ The app uses the CloudFront URL created during deployment, with HTTPS provided b
 
 - **Meeting notes:** upload an MP3 to get a transcript, speaker labels, agenda, detailed notes, follow-up tasks, suggestions, and a mind map.
 - **Audio preprocessing:** optional spectral noise reduction, conservative head/tail chatter exclusion, and a technical glossary for AWS, lectures and interviews. Download processed MP3/MP4 files alongside the originals, with original-time offsets and an auditable transcript. Applies to new transcription jobs; see [audio processing](docs/audio-processing.md).
+- **Speech model choices:** use Qwen3-ASR with NVIDIA Nemotron 3 by default, or select CrisperWhisper/ARK for STT and Community-1 or a single-speaker mode for diarization. Save account defaults and override them per upload. See [speech models](docs/speech-models.md).
 - **Speaker review:** contextual corrections are checked against transcript evidence. Uncertain changes keep the original speaker and are marked for review. Compare the original and corrected transcripts or play the supporting speech. See [speaker review](docs/speaker-review.md).
 - **Meeting editing:** change a meeting title while analysis is running or after it finishes. Title and participant-name edits are coordinated with final document publication so concurrent saves preserve new results.
 - **Short meeting brief:** a separate recap of the outcome, decisions and their reasoning, action items, and unresolved questions. Decision explanations include transcript evidence when available.

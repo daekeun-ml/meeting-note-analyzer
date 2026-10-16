@@ -1,5 +1,6 @@
 import { DEFAULT_AUDIO_PROCESSING } from "@meeting-notes/shared";
 import { AudioProcessingSettings } from "../components/AudioProcessingSettings";
+import { UploadSpeechModels, useSpeechModelChoice } from "../components/SpeechModels";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -23,15 +24,17 @@ export function LectureUploadForm() {
   const [language, setLanguage] = useState<OutputLanguage>("ko"); const [hint, setHint] = useState("auto");
   const [progress, setProgress] = useState(0); const [busy, setBusy] = useState(false); const [phase, setPhase] = useState("");
   const [error, setError] = useState(""); const [plan, setPlan] = useState<CreateLectureResponse | null>(null);
+  const speech = useSpeechModelChoice(busy || !!plan);
+  const speechLanguage = speech.value.stt === "ark-asr" ? "en" : hint;
   const [uploaded, setUploaded] = useState({ video: false, audio: false, slides: false });
   const [completedParts, setCompletedParts] = useState<Partial<Record<"video" | "audio" | "slides", UploadedPart[]>>>({});
   const isVideo = mediaKind === "video";
   const mediaLabel = isVideo ? "강의 영상" : "강의 음성";
   async function submit() {
-    if (!media || badSlides) return;
+    if (!media || badSlides || speech.loading) return;
     setError(""); setBusy(true);
     try {
-      const parsed = createLectureSchema.safeParse({ title, course, customPrompt, audioProcessing, slideRange: slides ? slideRange : "", outputLanguage: language, languageHint: hint,
+      const parsed = createLectureSchema.safeParse({ title, course, customPrompt, audioProcessing, speechModels: speech.value, slideRange: slides ? slideRange : "", outputLanguage: language, languageHint: speechLanguage,
         [mediaKind]: { fileName: media.name, fileSize: media.size, contentType: isVideo ? "video/mp4" : "audio/mpeg" },
         slides: slides ? { fileName: slides.name, fileSize: slides.size, contentType: /\.pdf$/i.test(slides.name) ? SLIDE_TYPES.pdf : SLIDE_TYPES.pptx } : undefined });
       if (!parsed.success) throw new Error(parsed.error.issues.map((x) => x.message).join(", "));
@@ -78,6 +81,7 @@ export function LectureUploadForm() {
         {(slides || badSlides) && <Button variant="ghost" size="sm" className="mt-2" onClick={() => chooseSlides(null)}>첨부 취소</Button>}
       </div>
       <AudioProcessingSettings value={audioProcessing} onChange={setAudioProcessing} disabled={busy || !!plan} />
+      <UploadSpeechModels choice={speech} disabled={busy || !!plan} />
       <label className="block"><SectionLabel>강의 제목</SectionLabel><input aria-label="강의 제목" maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 머신러닝 3주차 — 최적화" className={inputClass} /></label>
       <label className="block"><SectionLabel>과목명 (선택)</SectionLabel><input aria-label="과목명" maxLength={120} value={course} onChange={(e) => setCourse(e.target.value)} placeholder="예: 고급 머신러닝" className={inputClass} /></label>
       {slides && <label className="block"><SectionLabel>분석할 페이지 (선택)</SectionLabel>
@@ -93,11 +97,11 @@ export function LectureUploadForm() {
         <span className="block mt-1 text-right text-xs text-ink-3">{customPrompt.length.toLocaleString()} / {LECTURE_LIMITS.maxCustomPromptChars.toLocaleString()}</span>
       </label>
       <div><SectionLabel>학습 자료 언어</SectionLabel><Segmented className="mt-2" value={language} onChange={setLanguage} options={[{ value: "ko", label: "한국어" }, { value: "en", label: "English" }, { value: "auto", label: "강의 언어" }]} /></div>
-      <label className="block"><SectionLabel>강의에서 사용하는 언어</SectionLabel><select aria-label="강의 언어" className={inputClass} value={hint} onChange={(e) => setHint(e.target.value)}><option value="auto">자동 감지</option><option value="ko">한국어</option><option value="en">English</option><option value="ja">日本語</option><option value="zh">中文</option></select></label>
+      <label className="block"><SectionLabel>강의에서 사용하는 언어</SectionLabel><select aria-label="강의 언어" className={inputClass} value={speechLanguage} disabled={speech.value.stt === "ark-asr"} onChange={(e) => setHint(e.target.value)}><option value="auto">자동 감지</option><option value="ko">한국어</option><option value="en">English</option><option value="ja">日本語</option><option value="zh">中文</option></select></label>
     </fieldset>
     {busy && <div className="mt-5" role="status"><p className="text-sm text-ink-2 mb-2">{phase} {progress}%</p><ProgressBar value={progress} /></div>}
     {error && <InlineError>{error}</InlineError>}
-    <Button full className="mt-6" loading={busy} disabled={!media || badSlides || !title.trim()} onClick={() => void submit()}>{plan ? "업로드 이어서 진행" : "학습 자료 만들기"}</Button>
+    <Button full className="mt-6" loading={busy} disabled={speech.loading || !media || badSlides || !title.trim()} onClick={() => void submit()}>{plan ? "업로드 이어서 진행" : "학습 자료 만들기"}</Button>
     {plan && !busy && <Link className="block text-center text-sm text-ink-3 mt-3" to={`/lectures/${plan.lecture.lectureId}`}>등록된 강의 보기 / 삭제</Link>}
     <p className="mt-3 text-xs text-ink-3 leading-relaxed">업로드가 끝나면 앱을 닫아도 됩니다. 강의 내용을 쉽게 풀어 설명하고, 수식의 기호와 유도 과정을 포함한 복습 자료를 만듭니다.</p>
   </>;

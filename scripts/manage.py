@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = Path(os.environ.get("MEETING_CONFIG_FILE", ROOT / "deploy.local.json")).resolve()
@@ -198,19 +200,54 @@ def foundation(config: dict) -> None:
     cdk(config, "deploy", ["Data", "Stt"], ["-c", "sttDeployEndpoint=false"])
 
 
+def speech_catalog():
+    content = (ROOT / "stt/src/stt/model_catalog.json").read_bytes()
+    return json.loads(content), hashlib.sha256(content).hexdigest()[:12]
+
+
+def speech_model_prefix(config: dict) -> str:
+    catalog, signature = speech_catalog()
+    return f"models/stt/{catalog['version']}-{signature}/{config['sttModelVariant']}/"
+
+
 def models_ready(config: dict) -> bool:
     data = outputs(config, "Data", missing=True)
     if not data:
         return False
-    prefix = f"models/stt/{config['sttModelVariant']}/"
-    return all(aws(config, "s3api", "head-object", {"Bucket": data["DataBucketName"], "Key": prefix + key}, missing=True) is not None for key in ("crisperwhisper/ct2/model.bin", "pyannote/community-1/config.yaml"))
+    prefix = speech_model_prefix(config)
+    catalog, _ = speech_catalog()
+    required = ["ready.json", "crisperwhisper/ct2/model.bin", "pyannote/community-1/config.yaml"]
+    required.extend(f"{spec['directory']}/model.safetensors" for spec in catalog["models"].values())
+    return all(aws(config, "s3api", "head-object", {"Bucket": data["DataBucketName"], "Key": prefix + key}, missing=True) is not None for key in required)
 
 
 def publish_models(config: dict) -> None:
     publisher = outputs(config, "Stt")["PublisherProject"]
     env = environment(config)
     env["STT_PUBLISHER_PROJECT"] = publisher
-    subprocess.run(["bash", str(ROOT / "scripts/stt/publish-model.sh"), config["sttModelVariant"]], cwd=ROOT, env=env, check=True)
+    # Publish the current source before changing the endpoint. An existing
+    # CodeBuild project can still refer to an older deployment's source archive.
+    catalog, _ = speech_catalog()
+    bucket = outputs(config, "Data")["DataBucketName"]
+    with tempfile.TemporaryDirectory(prefix="speech-publisher-") as directory:
+        archive = Path(directory) / "publisher.zip"
+        with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
+            for path in sorted((ROOT / "scripts/stt").iterdir()):
+                if path.is_file() and path.suffix in (".py", ".sh", ".yml"):
+                    bundle.write(path, path.name)
+        digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+        source_key = f"models/publisher/{digest}.zip"
+        run(["aws", "s3", "cp", str(archive), f"s3://{bucket}/{source_key}", "--no-progress"], config)
+        variables = {"DATA_BUCKET": bucket, "MODEL_VARIANT": config["sttModelVariant"],
+                     "SPEECH_MODEL_CATALOG": json.dumps(catalog), "SPEECH_MODEL_PREFIX": speech_model_prefix(config),
+                     "LEGACY_MODEL_PREFIX": f"models/stt/{config['sttModelVariant']}/",
+                     "LEGACY_MODEL_REVISION": config["sttModelRevision"]}
+        build_input = Path(directory) / "build-input.json"
+        private_json(build_input, {"projectName": publisher, "sourceTypeOverride": "S3",
+            "sourceLocationOverride": f"{bucket}/{source_key}",
+            "environmentVariablesOverride": [{"name": name, "value": value, "type": "PLAINTEXT"} for name, value in variables.items()]})
+        env["STT_PUBLISHER_BUILD_INPUT"] = str(build_input)
+        subprocess.run(["bash", str(ROOT / "scripts/stt/publish-model.sh"), config["sttModelVariant"]], cwd=ROOT, env=env, check=True)
     if not models_ready(config):
         raise OperationError("Model files are incomplete. Check the CodeBuild logs and Hugging Face model access.")
 

@@ -19,12 +19,15 @@ import {
 } from "../routes/meetings.js";
 import { subscribe, subscriptionSchema, unsubscribe, unsubscribeSchema } from "../routes/push.js";
 import { createChatSessionSchema, createSession, getMessages, listSessions, removeSession } from "../routes/chat.js";
-import { toMeetingDto } from "@meeting-notes/shared";
+import { speechModelsSchema, toMeetingDto } from "@meeting-notes/shared";
+import { getSpeechPreferences, saveSpeechPreferences } from "../routes/speech-preferences.js";
 
 type Route = (event: APIGatewayProxyEventV2WithJWTAuthorizer) => Promise<APIGatewayProxyResultV2>;
 
 /** Route table keyed by "<METHOD> <routeKey path>" as API Gateway HTTP API reports it. */
 const routes: Record<string, Route> = {
+  "GET /api/speech-preferences": async (event) => json(200, await getSpeechPreferences(callerFrom(event))),
+  "PUT /api/speech-preferences": async (event) => json(200, await saveSpeechPreferences(callerFrom(event), parseBody(event, speechModelsSchema))),
   "GET /api/me": async (event) => {
     const caller = callerFrom(event);
     return json(200, { sub: caller.sub, email: caller.email ?? null, name: caller.name ?? null });

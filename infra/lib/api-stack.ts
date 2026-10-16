@@ -87,6 +87,7 @@ export class ApiStack extends Stack {
       ["/api/meetings/{id}/speakers", [apigw.HttpMethod.PATCH]],
       ["/api/push/subscription", [apigw.HttpMethod.PUT, apigw.HttpMethod.DELETE]],
       ["/api/push/vapid-public-key", [apigw.HttpMethod.GET]],
+      ["/api/speech-preferences", [apigw.HttpMethod.GET, apigw.HttpMethod.PUT]],
       ["/api/chat/sessions", [apigw.HttpMethod.GET, apigw.HttpMethod.POST]],
       ["/api/chat/sessions/{id}", [apigw.HttpMethod.DELETE]],
       ["/api/chat/sessions/{id}/messages", [apigw.HttpMethod.GET]],

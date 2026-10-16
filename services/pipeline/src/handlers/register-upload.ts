@@ -1,6 +1,6 @@
 import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getMeeting, s3 } from "@meeting-notes/backend";
-import { CONSTRAINTS, parseUploadKey, type AudioProcessingOptions } from "@meeting-notes/shared";
+import { CONSTRAINTS, parseUploadKey, type AudioProcessingOptions, type SpeechModels } from "@meeting-notes/shared";
 import { setStatus, updateMeeting } from "../lib/meeting-updates.js";
 import { resumePlan } from "../lib/resume.js";
 
@@ -22,6 +22,8 @@ export interface RegisterUploadOutput {
   outputLanguage?: string;
   languageHint?: string;
   audioProcessing?: AudioProcessingOptions;
+  speechModels?: SpeechModels;
+  transcriptSpeechModels?: SpeechModels;
   /** Resume mode: downstream steps skip work whose outputs already exist. */
   resume?: boolean;
   transcriptKey?: string;
@@ -66,6 +68,8 @@ async function registerRetry(meetingId: string, executionArn: string, addBrief =
     outputLanguage: meeting.outputLanguage,
     languageHint: meeting.languageHint,
     audioProcessing: meeting.audioProcessing,
+    speechModels: meeting.speechModels,
+    transcriptSpeechModels: meeting.transcriptSpeechModels,
     resume: true,
     transcriptKey: plan.hasTranscript ? meeting.transcriptKey : undefined,
     briefOnly: addBrief,
@@ -110,5 +114,6 @@ export const handler = async (input: RegisterUploadInput): Promise<RegisterUploa
     outputLanguage: meeting.outputLanguage,
     languageHint: meeting.languageHint,
     audioProcessing: meeting.audioProcessing,
+    speechModels: meeting.speechModels,
   };
 };

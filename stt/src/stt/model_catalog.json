@@ -1,0 +1,9 @@
+{
+  "version": "speech-v1",
+  "models": {
+    "qwen3-asr": {"repository": "Qwen/Qwen3-ASR-1.7B-hf", "revision": "bcd2b5b7f32b480ab5790554cfa8347f246a14f3", "directory": "qwen3_asr"},
+    "qwen3-aligner": {"repository": "Qwen/Qwen3-ForcedAligner-0.6B-hf", "revision": "c07281df297b9905d24a508279258cccf987a064", "directory": "qwen3_aligner"},
+    "ark-asr": {"repository": "Edge0/ARK-ASR-0.6B", "revision": "45776b56d58cdfb2e2eb632f7e110f38684633e0", "directory": "ark_asr"},
+    "nemotron3": {"repository": "nvidia/Nemotron-3-Diarization", "revision": "f667ed73aee57d40cc39428eb768b4fd87a0a29e", "directory": "nemotron3"}
+  }
+}

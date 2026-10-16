@@ -1,4 +1,6 @@
 import { CfnOutput, Duration, Stack, type StackProps } from "aws-cdk-lib";
+import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import * as appscaling from "aws-cdk-lib/aws-applicationautoscaling";
 import * as cloudwatch from "aws-cdk-lib/aws-cloudwatch";
 import * as codebuild from "aws-cdk-lib/aws-codebuild";
@@ -21,7 +23,7 @@ export interface SttStackProps extends StackProps {
 }
 
 /**
- * SageMaker async inference endpoint for CrisperWhisper 2.0 + pyannote, plus the x86 CodeBuild
+ * SageMaker async inference endpoint for selectable speech models, plus the x86 CodeBuild
  * project that downloads/converts model weights into the S3 prefix the endpoint mounts.
  */
 export class SttStack extends Stack {
@@ -36,19 +38,26 @@ export class SttStack extends Stack {
     const { config, dataBucket } = props;
     this.endpointName = `${config.projectName}-stt`;
     this.endpointArn = `arn:aws:sagemaker:${this.region}:${this.account}:endpoint/${this.endpointName}`;
-    this.modelPrefix = `models/stt/${config.sttModelVariant}/`;
+    const catalogBytes = readFileSync(repoPath("stt/src/stt/model_catalog.json"));
+    const speechCatalog = JSON.parse(catalogBytes.toString("utf8"));
+    const catalogHash = createHash("sha256").update(catalogBytes).digest("hex").slice(0, 12);
+    this.modelPrefix = `models/stt/${speechCatalog.version}-${catalogHash}/${config.sttModelVariant}/`;
 
     // ---- model publisher (x86_64 CodeBuild: HF download -> CT2 conversion -> s3 sync) ----
     const publisherSrc = new Asset(this, "PublisherSrc", { path: repoPath("scripts/stt") });
     const publisher = new codebuild.Project(this, "ModelPublisher", {
       projectName: `${config.projectName}-stt-model-publisher`,
-      description: "Downloads CrisperWhisper/pyannote weights, converts to CTranslate2, syncs to the data bucket",
+      description: "Publishes pinned speech model choices, retaining converted CrisperWhisper and pyannote artifacts",
       source: codebuild.Source.s3({ bucket: publisherSrc.bucket, path: publisherSrc.s3ObjectKey }),
       environment: { buildImage: codebuild.LinuxBuildImage.STANDARD_7_0, computeType: codebuild.ComputeType.LARGE },
       timeout: Duration.hours(3),
       environmentVariables: {
         DATA_BUCKET: { value: dataBucket.bucketName },
         MODEL_VARIANT: { value: config.sttModelVariant },
+        SPEECH_MODEL_CATALOG: { value: JSON.stringify(speechCatalog) },
+        SPEECH_MODEL_PREFIX: { value: this.modelPrefix },
+        LEGACY_MODEL_PREFIX: { value: `models/stt/${config.sttModelVariant}/` },
+        LEGACY_MODEL_REVISION: { value: config.sttModelRevision },
         HF_TOKEN: { type: codebuild.BuildEnvironmentVariableType.SECRETS_MANAGER, value: config.hfTokenSecretName },
       },
       logging: { cloudWatch: { logGroup: new logs.LogGroup(this, "PublisherLogs", { retention: logs.RetentionDays.ONE_MONTH }) } },
@@ -113,6 +122,7 @@ export class SttStack extends Stack {
             STT_SCOPE_SONNET_MODEL: config.sonnetModel,
             MODEL_DIR: "/opt/ml/model",
             STT_BACKEND: "ct2",
+            STT_MODEL_CATALOG: speechCatalog.version,
             CRISPERWHISPER_SUBDIR: "crisperwhisper/ct2",
             PYANNOTE_SUBDIR: "pyannote/community-1",
             STT_MODEL_NAME: `CrisperWhisper2.0_${config.sttModelVariant}`,

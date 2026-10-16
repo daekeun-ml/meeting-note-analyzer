@@ -2,6 +2,7 @@ import { z } from "zod";
 import { CONSTRAINTS, OUTPUT_LANGUAGES } from "./constants.js";
 import type { LectureAsset, LectureRecord, LectureUploadPlan } from "./lecture.js";
 import { audioProcessingOptionsSchema, type AudioProcessingOptions, type AudioProcessingReport, type ProcessedMediaLinks } from "./audio-processing.js";
+import { speechModelsSchema, type SpeechModels } from "./speech-models.js";
 
 export const TECHNICAL_FIT_CRITERIA = ["domain_depth", "system_architecture", "technical_communication"] as const;
 export const AMAZON_LP_CRITERIA = [
@@ -53,6 +54,7 @@ export const interviewSettingsSchema = z.object({
 export type InterviewSettings = z.output<typeof interviewSettingsSchema>;
 export const createInterviewSchema = z.object({
   audioProcessing: audioProcessingOptionsSchema.optional(),
+  speechModels: speechModelsSchema.optional(),
   title: z.string().trim().min(1).max(200),
   languageHint: z.enum(["ko", "en", "ja", "zh", "auto"]).default("auto"),
   audio: z.object({ fileName: z.string().trim().min(1).max(255).regex(/\.mp3$/i, "MP3 파일을 선택하세요"),
@@ -71,17 +73,18 @@ export interface InterviewRecord {
   preparedAudioKey?: string; hasAudio?: boolean; durationSec?: number;
   transcriptKey?: string; documentKey?: string; markdownKey?: string; error?: string;
   originalTranscriptKey?: string; audioProcessing?: AudioProcessingOptions; processing?: AudioProcessingReport;
+  speechModels?: SpeechModels; transcriptSpeechModels?: SpeechModels;
   speakerHints?: { id: string; role: "candidate" | "interviewer" | "unknown"; label: string; confidence: number }[];
   createdAt: string; updatedAt: string; completedAt?: string;
 }
-export type InterviewDto = Pick<InterviewRecord, "interviewId" | "title" | "settings" | "status" | "stages" | "currentStage" | "durationSec" | "error" | "createdAt" | "updatedAt" | "completedAt" | "speakerHints"> & { audioName: string; resumeName?: string; uploadsComplete: boolean };
+export type InterviewDto = Pick<InterviewRecord, "interviewId" | "title" | "settings" | "status" | "stages" | "currentStage" | "durationSec" | "error" | "createdAt" | "updatedAt" | "completedAt" | "speakerHints" | "speechModels" | "transcriptSpeechModels"> & { audioName: string; resumeName?: string; uploadsComplete: boolean };
 export function interviewUploadsComplete(record: Pick<InterviewRecord, "assets">) {
   return record.assets.audio.complete && (!record.assets.resume || record.assets.resume.complete);
 }
 export function toInterviewDto(record: InterviewRecord): InterviewDto {
-  const { interviewId, title, settings, status, stages, currentStage, durationSec, error, createdAt, updatedAt, completedAt, speakerHints } = record;
+  const { interviewId, title, settings, status, stages, currentStage, durationSec, error, createdAt, updatedAt, completedAt, speakerHints, speechModels, transcriptSpeechModels } = record;
   return { interviewId, title, settings, status, stages, currentStage, durationSec, error, createdAt, updatedAt, completedAt, speakerHints,
-    audioName: record.assets.audio.fileName, resumeName: record.assets.resume?.fileName, uploadsComplete: interviewUploadsComplete(record) };
+    speechModels, transcriptSpeechModels, audioName: record.assets.audio.fileName, resumeName: record.assets.resume?.fileName, uploadsComplete: interviewUploadsComplete(record) };
 }
 export const completeInterviewUploadSchema = z.object({
   asset: z.enum(["audio", "resume"]).default("audio"), uploadId: z.string().min(1).max(1024),

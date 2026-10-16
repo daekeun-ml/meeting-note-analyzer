@@ -7,6 +7,8 @@ import { CONSTRAINTS, LECTURE_LIMITS, SLIDE_TYPES, lectureKeys, lectureUploadsCo
 import type { z } from "zod";
 import type { LecturePreferences } from "@meeting-notes/shared";
 import { markProcessingDeleted, processedMediaLinks } from "../lib/processed-media.js";
+import { getSpeechPreferences } from "./speech-preferences.js";
+import { speechLanguageError } from "@meeting-notes/shared";
 import { HttpError, type Caller } from "../lib/http.js";
 
 const sfn = new SFNClient({});
@@ -16,6 +18,9 @@ export async function ownedLecture(caller: Caller, id: string) {
   return rec;
 }
 export async function createLecture(caller: Caller, input: z.output<typeof createLectureSchema>): Promise<CreateLectureResponse> {
+  input = { ...input, speechModels: input.speechModels ?? await getSpeechPreferences(caller) };
+  const speechError = speechLanguageError(input.speechModels!, input.languageHint);
+  if (speechError) throw new HttpError(400, speechError, "unsupported_speech_language");
   const id = randomUUID(); const now = new Date().toISOString();
   const prefix = lectureKeys.inputPrefix(caller.sub, id);
   const mediaKind = input.video ? "video" : "audio";
@@ -31,6 +36,7 @@ export async function createLecture(caller: Caller, input: z.output<typeof creat
       ...(input.customPrompt ? { customPrompt: input.customPrompt } : {}),
       ...(input.preferences ? { preferences: input.preferences } : {}),
       ...(input.audioProcessing ? { audioProcessing: input.audioProcessing } : {}),
+      speechModels: input.speechModels,
       ...(input.slideRange ? { slideRange: input.slideRange } : {}),
       status: "UPLOAD_PENDING", stages: {}, createdAt: now, updatedAt: now,
       assets: { [mediaKind]: { ...mediaInput, key: mediaKey, uploadId: media.uploadId, complete: false }, ...(slides && input.slides ? { slides: { ...input.slides, key: slidesKey, uploadId: slides.uploadId, complete: false } } : {}) },

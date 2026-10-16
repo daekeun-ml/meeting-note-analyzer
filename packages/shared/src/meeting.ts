@@ -1,5 +1,6 @@
 import type { MeetingStatus, OutputLanguage, Stage } from "./constants.js";
 import type { AudioProcessingOptions, AudioProcessingReport, ProcessedMediaLinks } from "./audio-processing.js";
+import type { SpeechModels } from "./speech-models.js";
 
 export type StageStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
 
@@ -35,6 +36,8 @@ export interface MeetingRecord {
   transcriptKey?: string;
   originalTranscriptKey?: string;
   audioProcessing?: AudioProcessingOptions;
+  speechModels?: SpeechModels;
+  transcriptSpeechModels?: SpeechModels;
   processing?: AudioProcessingReport;
   notesKey?: string;
   /** Set while an execution adds only a brief to this published meeting; the meeting itself stays COMPLETED. */
@@ -92,6 +95,7 @@ export interface TaskTokenRecord {
 /** Request/response DTOs for the HTTP API. */
 export interface CreateMeetingRequest {
   audioProcessing?: AudioProcessingOptions;
+  speechModels?: SpeechModels;
   title?: string;
   fileName: string;
   fileSize: number;

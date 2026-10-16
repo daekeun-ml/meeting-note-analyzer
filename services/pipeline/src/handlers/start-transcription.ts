@@ -6,6 +6,7 @@ import { pipelineEnv } from "../lib/env.js";
 import { setStage } from "../lib/meeting-updates.js";
 import { saveTaskToken } from "../lib/task-tokens.js";
 import { CONSTRAINTS, INTERVIEW_INFERENCE_PREFIX, LECTURE_INFERENCE_PREFIX, type AudioProcessingOptions } from "@meeting-notes/shared";
+import { LEGACY_SPEECH_MODELS, sameSpeechModels, type SpeechModels } from "@meeting-notes/shared";
 
 const smr = new SageMakerRuntimeClient({});
 
@@ -20,6 +21,8 @@ export interface StartTranscriptionInput {
   context?: string;
   scopeModel?: "opus" | "sonnet";
   audioProcessing?: AudioProcessingOptions;
+  speechModels?: SpeechModels;
+  transcriptSpeechModels?: SpeechModels;
   languageHint?: string;
   resume?: boolean;
   transcriptKey?: string | null;
@@ -38,15 +41,16 @@ export function buildSttRequest(input: StartTranscriptionInput, bucket: string, 
     scope_model: input.scopeModel ?? "opus",
     ...(input.videoKey ? { video_s3_uri: `s3://${bucket}/${input.videoKey}` } : {}),
     ...(input.audioProcessing ? { processing: input.audioProcessing } : {}),
+    speechModels: input.speechModels ?? LEGACY_SPEECH_MODELS,
     language: input.languageHint && input.languageHint !== "auto" ? input.languageHint : null,
     mode,
     hotwords: [] as string[],
-    diarization: { enabled: true },
+    diarization: { enabled: input.speechModels?.diarization !== "none" },
   };
 }
 
 export const handler = async (input: StartTranscriptionInput) => {
-  if (input.resume && input.transcriptKey) {
+  if (input.resume && input.transcriptKey && sameSpeechModels(input.speechModels ?? LEGACY_SPEECH_MODELS, input.transcriptSpeechModels ?? LEGACY_SPEECH_MODELS)) {
     // Retry of a meeting whose transcript already exists: hand the token back at once and let Normalize pass it through.
     await sfn.send(new SendTaskSuccessCommand({ taskToken: input.taskToken, output: JSON.stringify({ skipped: true, transcriptKey: input.transcriptKey }) }));
     return { skipped: true, transcriptKey: input.transcriptKey };

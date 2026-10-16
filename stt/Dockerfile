@@ -1,4 +1,4 @@
-# SageMaker BYOC image (x86_64 GPU): CrisperWhisper 2.0 (CTranslate2) + pyannote.audio 4 diarization.
+# SageMaker BYOC (x86_64 GPU): Qwen/ARK/CT2 ASR, Qwen alignment, Nemotron/pyannote diarization.
 # Contract: `docker run <image> serve` -> HTTP :8080 with GET /ping, POST /invocations.
 FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
 
@@ -26,6 +26,14 @@ ARG CRISPERWHISPER_COMMIT=b60a35313d6538de82dd26d00947c21b884414d4
 RUN /opt/venv/bin/pip uninstall -y crisperwhisper && /opt/venv/bin/pip install --no-cache-dir --no-deps \
       "https://github.com/nyrahealth/CrisperWhisper/archive/${CRISPERWHISPER_COMMIT}.tar.gz" \
     && grep -q "def decode_word_texts" /opt/venv/lib/python3.12/site-packages/crisperwhisper/word_timing.py
+
+# Native Qwen ASR/aligner and Nemotron APIs. ARK's reviewed, pinned remote-code
+# snapshot uses the same Transformers runtime. Shared libpython enables torchcodec.
+RUN apt-get update && apt-get install -y --no-install-recommends libpython3.12 \
+    && rm -rf /var/lib/apt/lists/* \
+    && /opt/venv/bin/pip install --no-cache-dir "transformers==5.20.1" "accelerate>=1.0,<2" \
+      "librosa>=0.11,<0.12" "soynlp==0.0.493" "nagisa==0.3.0"
+ENV HF_MODULES_CACHE=/tmp/hf-modules PYANNOTE_METRICS_ENABLED=0
 
 WORKDIR /app
 COPY src /app/src

@@ -59,6 +59,14 @@ it("rejects foreign artifacts, invented evidence, timeline shifts, and interior 
   expect(send).not.toHaveBeenCalled();
 });
 
+it("does not publish a transcript produced with a different model selection", async () => {
+  const raw = fixture();
+  raw.speechModels = { stt: "crisperwhisper", diarization: "community1" };
+  await expect(persistTranscripts(raw, "transcripts/m1/transcript.json", "meeting", "m1",
+    { stt: "qwen3-asr", diarization: "nemotron3" })).rejects.toThrow("different speech model");
+  expect(send).not.toHaveBeenCalled();
+});
+
 it("removes late transcript writes when deletion begins while the files are being saved", async () => {
   let heads = 0;
   send.mockImplementation(async (command) => {

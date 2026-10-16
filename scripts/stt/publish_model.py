@@ -4,10 +4,13 @@ Layout produced under <out>/:
   crisperwhisper/ct2/        CTranslate2-converted CrisperWhisper 2.0 (model.bin + tokenizer/config files)
   pyannote/community-1/      snapshot of pyannote/speaker-diarization-community-1 (config.yaml + weights)
   hf-cache/hub/              HuggingFace cache with the pyannote repos, for offline loading by repo id
+  qwen3_asr/, qwen3_aligner/ pinned Qwen transcription and word-alignment snapshots
+  ark_asr/, nemotron3/      pinned alternative ASR and default diarization snapshots
 """
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -88,9 +91,58 @@ def fetch_pyannote() -> None:
         junk.unlink(missing_ok=True)
 
 
+def reuse_legacy() -> bool:
+    """Keep the already deployed legacy weights when adding selectable models."""
+    bucket, prefix = os.environ.get("DATA_BUCKET"), os.environ.get("LEGACY_MODEL_PREFIX")
+    if not bucket or not prefix:
+        return False
+    import boto3
+    from botocore.exceptions import ClientError
+    client = boto3.client("s3")
+    try:
+        client.head_object(Bucket=bucket, Key=prefix + "crisperwhisper/ct2/model.bin")
+        client.head_object(Bucket=bucket, Key=prefix + "pyannote/community-1/config.yaml")
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+            return False
+        raise
+    log("reusing deployed CrisperWhisper and Community-1 weights")
+    for page in client.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix):
+        for item in page.get("Contents", []):
+            relative = item["Key"][len(prefix):]
+            if not relative.startswith(("crisperwhisper/", "pyannote/", "hf-cache/")) or not item["Size"]:
+                continue
+            destination = OUT / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            client.download_file(bucket, item["Key"], str(destination))
+    return True
+
+
+def fetch_speech_choices():
+    raw = os.environ.get("SPEECH_MODEL_CATALOG")
+    if not raw:
+        return
+    catalog = json.loads(raw)
+    for spec in catalog["models"].values():
+        log(f"downloading pinned {spec['repository']} at {spec['revision']}")
+        target = OUT / spec["directory"]
+        snapshot_download(spec["repository"], revision=spec["revision"], token=TOKEN, local_dir=str(target),
+                          allow_patterns=["*.json", "*.safetensors", "*.py", "*.model", "*.txt", "*.jinja", "*.md"])
+        shutil.rmtree(target / ".cache", ignore_errors=True)
+        if not (target / "config.json").is_file() or not list(target.glob("*.safetensors")):
+            raise ValueError("Incomplete speech model snapshot")
+    (OUT / "bundle-manifest.json").write_text(json.dumps({
+        **catalog, "legacyArtifactRevision": os.environ.get("LEGACY_MODEL_REVISION", "converted"),
+    }, indent=2))
+
+
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
-    convert_crisperwhisper()
-    fetch_pyannote()
+    if not reuse_legacy():
+        convert_crisperwhisper()
+        fetch_pyannote()
+    fetch_speech_choices()
+    for empty in (path for path in OUT.rglob("*") if path.is_file() and path.stat().st_size == 0):
+        empty.unlink()
     total = sum(p.stat().st_size for p in OUT.rglob("*") if p.is_file()) / 1e9
     log(f"done, {total:.2f} GB under {OUT}")

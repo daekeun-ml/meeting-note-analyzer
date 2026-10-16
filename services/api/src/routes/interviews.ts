@@ -8,6 +8,8 @@ import type { z } from "zod";
 import { HttpError, type Caller } from "../lib/http.js";
 import { validateParts } from "./lectures.js";
 import { markProcessingDeleted, processedMediaLinks } from "../lib/processed-media.js";
+import { getSpeechPreferences } from "./speech-preferences.js";
+import { speechLanguageError } from "@meeting-notes/shared";
 
 const sfn = new SFNClient({});
 export async function ownedInterview(caller: Caller, id: string) {
@@ -16,6 +18,9 @@ export async function ownedInterview(caller: Caller, id: string) {
   return record;
 }
 export async function createInterview(caller: Caller, input: z.output<typeof createInterviewSchema>): Promise<CreateInterviewResponse> {
+  input = { ...input, speechModels: input.speechModels ?? await getSpeechPreferences(caller) };
+  const speechError = speechLanguageError(input.speechModels!, input.languageHint);
+  if (speechError) throw new HttpError(400, speechError, "unsupported_speech_language");
   const id = randomUUID(); const now = new Date().toISOString();
   const key = `${interviewKeys.inputPrefix(caller.sub, id)}audio.mp3`;
   const upload = await createMultipartUpload(key, "audio/mpeg", input.audio.fileSize, INTERVIEW_LIMITS.uploadExpirySec);
@@ -26,6 +31,7 @@ export async function createInterview(caller: Caller, input: z.output<typeof cre
     const record: InterviewRecord = { ...interviewKeys.record(id), GSI1PK: interviewKeys.user(caller.sub), GSI1SK: now,
       interviewId: id, owner: caller.sub, title: input.title, languageHint: input.languageHint, settings: input.settings,
       ...(input.audioProcessing ? { audioProcessing: input.audioProcessing } : {}),
+      speechModels: input.speechModels,
       status: "UPLOAD_PENDING", stages: {}, createdAt: now, updatedAt: now,
       assets: { audio: { ...input.audio, key, uploadId: upload.uploadId, complete: false },
         ...(input.resume && resumeUpload ? { resume: { ...input.resume, key: resumeKey, uploadId: resumeUpload.uploadId, complete: false } } : {}) } };

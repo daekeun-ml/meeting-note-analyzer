@@ -10,6 +10,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
+from pydantic import ValidationError
 
 from .inference import Engine
 from .schemas import SttRequest
@@ -29,6 +30,13 @@ _lock = threading.Lock()
 
 def _load() -> None:
     try:
+        if os.environ.get("STT_MODEL_CATALOG") == "speech-v1":
+            from .model_registry import ModelRegistry
+            registry = ModelRegistry(MODEL_DIR)
+            registry.warmup()
+            _state["engine"] = Engine(registry=registry)
+            log.info("selectable speech models ready")
+            return
         from .transcriber import Transcriber
 
         backend = os.environ.get("STT_BACKEND", "auto")
@@ -75,7 +83,10 @@ async def invocations(request: Request) -> Response:
     if engine is None:
         return JSONResponse(status_code=503, content={"error": "model not loaded"})
     body = await request.json()
-    req = SttRequest.model_validate(body)
+    try:
+        req = SttRequest.model_validate(body)
+    except ValidationError:
+        return JSONResponse(status_code=400, content={"error": "Invalid transcription request or speech model selection"})
     log.info("processing meeting=%s uri=%s mode=%s", req.meetingId, req.audio_s3_uri, req.mode)
 
     def work():
@@ -91,4 +102,4 @@ async def invocations(request: Request) -> Response:
         log.exception("processing failed")
         return JSONResponse(status_code=400, content={"error": str(exc), "meetingId": req.meetingId})
     log.info("done meeting=%s duration=%.1fs segments=%d stats=%s", req.meetingId, resp.durationSec, len(resp.segments), resp.stats)
-    return JSONResponse(status_code=200, content=resp.model_dump(exclude_none=True))
+    return JSONResponse(status_code=200, content={**resp.model_dump(exclude_none=True), "language": resp.language})

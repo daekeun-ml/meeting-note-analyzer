@@ -21,11 +21,14 @@ import { HttpError, type Caller } from "../lib/http.js";
 import { abortMultipartUpload, applySpeakerLabels, completeMultipartUpload, createMultipartUpload, deleteMeetingMemory, deletePrefix, headObject, presignDownload, presignUpload, putFinalDocument, readJson } from "@meeting-notes/backend";
 import { apiEnv } from "../lib/env.js";
 import { markProcessingDeleted, processedMediaLinks } from "../lib/processed-media.js";
+import { speechLanguageError, speechModelsSchema } from "@meeting-notes/shared";
+import { getSpeechPreferences } from "./speech-preferences.js";
 
 const sfn = new SFNClient({});
 
 export const createMeetingSchema = z.object({
   audioProcessing: audioProcessingOptionsSchema.optional(),
+  speechModels: speechModelsSchema.optional(),
   title: z.string().trim().min(1).max(200).optional(),
   fileName: z.string().trim().min(1).max(255),
   fileSize: z.number().int().positive().max(CONSTRAINTS.maxUploadBytes, "파일이 너무 큽니다 (최대 500MB)"),
@@ -56,12 +59,16 @@ export function buildMeetingRecord(caller: Caller, input: CreateMeetingInput, no
     outputLanguage: input.outputLanguage,
     languageHint: input.languageHint,
     ...(input.audioProcessing ? { audioProcessing: input.audioProcessing } : {}),
+    ...(input.speechModels ? { speechModels: input.speechModels } : {}),
     createdAt,
     updatedAt: createdAt,
   };
 }
 
 export async function createMeeting(caller: Caller, input: CreateMeetingInput): Promise<CreateMeetingResponse> {
+  input = { ...input, speechModels: input.speechModels ?? await getSpeechPreferences(caller) };
+  const speechError = speechLanguageError(input.speechModels!, input.languageHint);
+  if (speechError) throw new HttpError(400, speechError, "unsupported_speech_language");
   const active = await countActiveMeetings(caller.sub);
   if (active >= CONSTRAINTS.maxActiveMeetingsPerUser) {
     throw new HttpError(429, `처리 중인 회의가 ${CONSTRAINTS.maxActiveMeetingsPerUser}건을 초과했습니다. 완료 후 다시 시도하세요.`, "too_many_active");

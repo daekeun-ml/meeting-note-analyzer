@@ -54,6 +54,19 @@ class DeploymentTests(unittest.TestCase):
             with self.assertRaises(manage.OperationError): manage.foundation(self.config)
             cdk.assert_not_called()
 
+    def test_model_readiness_requires_the_selected_bundle_and_ready_marker(self):
+        catalog, signature = manage.speech_catalog()
+        expected = f"models/stt/{catalog['version']}-{signature}/{self.config['sttModelVariant']}/"
+        self.assertEqual(manage.speech_model_prefix(self.config), expected)
+        checked = []
+        def head(config, service, operation, params, **kwargs):
+            checked.append(params["Key"])
+            return {} if not params["Key"].endswith("qwen3_aligner/model.safetensors") else None
+        with patch.object(manage, "outputs", return_value={"DataBucketName": "test-bucket"}), patch.object(manage, "aws", side_effect=head):
+            self.assertFalse(manage.models_ready(self.config))
+        self.assertEqual(checked[0], expected + "ready.json")
+        self.assertTrue(all(key.startswith(expected) for key in checked))
+
     def test_first_deploy_reapplies_the_assigned_cloudfront_url(self):
         calls = []
         with patch.object(manage, "CONFIG", self.config_path), patch.object(manage, "doctor"), patch.object(manage, "run"), patch.object(manage, "aws", return_value={}), patch.object(manage, "endpoint_exists", return_value=True), patch.object(manage, "models_ready", return_value=True), patch.object(manage, "outputs", return_value={"SiteUrl": "https://dexample.cloudfront.net"}), patch.object(manage, "check"), patch.object(manage, "cdk", side_effect=lambda config, action: calls.append((action, config["siteUrl"]))):

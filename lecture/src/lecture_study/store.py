@@ -1,5 +1,7 @@
 import json
 import os
+import hashlib
+import threading
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -22,6 +24,8 @@ class Store:
         # Result files of one attempt live under runs/{runId}/; the record points at the published run.
         self.run_prefix = f"runs/{request.runId}/"
         self.key = {"PK": f"MEETING#{request.lectureId}", "SK": "META"}
+        self._speech_cache = None
+        self._speech_cache_lock = threading.Lock()
 
     def record(self):
         rec = self.table.get_item(Key=self.key, ConsistentRead=True).get("Item")
@@ -65,7 +69,22 @@ class Store:
         self.s3.upload_file(str(path), self.bucket, self.prefix + suffix, ExtraArgs={"ContentType": content_type})
 
     def cached(self, suffix: str, build, accept=lambda value: True):
-        key = "cache/v2/" + suffix
+        # Old records retain their existing caches. New model-aware recordings
+        # bind analysis caches to the exact transcript, so re-transcription with
+        # another engine cannot reuse notes/alignment from the previous text.
+        if self._speech_cache is None:
+            with self._speech_cache_lock:
+                if self._speech_cache is None:
+                    record = self.record()
+                    prefix = ""
+                    if self.request.phase == "analyze" and record.get("speechModels") and record.get("transcriptKey"):
+                        transcript = self.read(record["transcriptKey"])
+                        if transcript is None:
+                            raise ValueError("Transcript is missing for model-aware analysis")
+                        signature = hashlib.sha256(json.dumps(transcript, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:20]
+                        prefix = f"speech-{signature}/"
+                    self._speech_cache = prefix
+        key = "cache/v2/" + self._speech_cache + suffix
         value = self.read(self.prefix + key)
         if value is None or not accept(value):
             value = build()

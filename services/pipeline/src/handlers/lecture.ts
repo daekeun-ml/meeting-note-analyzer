@@ -5,6 +5,7 @@ import { deletePrefix, env, getLecture, lectureKbMetadata, notifyUser, readJson,
 import { lectureKeys, lectureUploadsComplete, sttOutputSchema, type Transcript, type LectureRecord } from "@meeting-notes/shared";
 import { handler as startStt } from "./start-transcription.js";
 import { normalize, persistTranscripts } from "./normalize-transcript.js";
+import { LEGACY_SPEECH_MODELS } from "@meeting-notes/shared";
 import { parseS3Uri } from "../lib/s3-uri.js";
 
 interface Input { op: "register" | "prepare" | "transcribe" | "normalize" | "analyze" | "complete" | "failed"; lectureId: string; runId: string; taskToken?: string; attempt?: number; stt?: { skipped?: boolean; silent?: boolean; outputLocation?: string }; result?: { documentKey: string; markdownKey: string; flashcardsKey: string; researchFailures: number; pageCount: number; selectedPages?: number[]; originalPageCount?: number; studyImages?: LectureRecord["studyImages"] }; error?: unknown }
@@ -39,6 +40,7 @@ export const handler = async (input: Input) => {
       if (!audioKey) throw new Error("Prepared lecture audio is missing");
       return startStt({ kind: "lecture", taskToken: input.taskToken, meetingId: input.lectureId, ownerSub: rec.owner, audioKey, languageHint: rec.languageHint, resume: !!transcriptKey, transcriptKey,
         videoKey: rec.assets.video?.key, title: rec.title, context: rec.course, audioProcessing: rec.audioProcessing,
+        speechModels: rec.speechModels, transcriptSpeechModels: rec.transcriptSpeechModels,
         scopeModel: rec.preferences?.model === "sonnet" ? "sonnet" : "opus" });
     }
     case "normalize": {
@@ -55,8 +57,9 @@ export const handler = async (input: Input) => {
       }
       if (!transcript.segments.length && !rec.assets.video) throw new Error("No speech was found in the lecture recording");
       const key = `${lectureKeys.resultPrefix(input.lectureId)}transcript.json`;
-      const saved = await persistTranscripts(transcript, key, "lecture", input.lectureId);
+      const saved = await persistTranscripts(transcript, key, "lecture", input.lectureId, rec.speechModels);
       await update({ transcriptKey: key, originalTranscriptKey: saved.originalTranscriptKey, processing: saved.processing,
+        transcriptSpeechModels: transcript.model === "silent-video" ? undefined : transcript.speechModels ?? LEGACY_SPEECH_MODELS,
         durationSec: rec.durationSec ?? transcript.durationSec, status: "ANALYZING", stages: { ...rec.stages, stt: { status: "COMPLETED" } } });
       return { transcriptKey: key };
     }

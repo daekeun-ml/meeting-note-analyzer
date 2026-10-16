@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("../src/routes/speech-preferences.js", () => ({ getSpeechPreferences: async () => ({ stt: "qwen3-asr", diarization: "nemotron3" }) }));
 import { completeLectureUploadSchema, createLectureSchema, lectureKeys, parseUploadKey, parseSlideRange, SLIDE_TYPES, type LectureRecord } from "@meeting-notes/shared";
 
 const mocks = vi.hoisted(() => ({ claim: vi.fn(), release: vi.fn(), get: vi.fn(), list: vi.fn(), ddb: vi.fn(), s3: vi.fn(), start: vi.fn(), sign: vi.fn(), read: vi.fn(), multipart: vi.fn(), complete: vi.fn(), abort: vi.fn(), deletePrefix: vi.fn() }));

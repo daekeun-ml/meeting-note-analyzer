@@ -31,13 +31,19 @@ class DiarizerLike(Protocol):
 
 
 class Engine:
-    def __init__(self, transcriber: TranscriberLike, diarizer: DiarizerLike | None):
+    def __init__(self, transcriber: TranscriberLike | None = None, diarizer: DiarizerLike | None = None, *, registry=None):
         self.transcriber = transcriber
         self.diarizer = diarizer
+        self.registry = registry
         self.s3 = boto3.client("s3")
 
     def process(self, req: SttRequest) -> SttResponse:
         t0 = time.time()
+        if self.registry is None and (req.speechModels.stt != "crisperwhisper" or req.speechModels.diarization == "nemotron3"):
+            raise ValueError("선택한 음성 모델이 이 엔드포인트에 준비되지 않았습니다.")
+        transcriber, diarizer = self.registry.activate(req.speechModels) if self.registry else (self.transcriber, self.diarizer)
+        if transcriber is None:
+            raise RuntimeError("Transcription model is not available")
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / "audio.mp3"
             self._download(req.audio_s3_uri, src)
@@ -57,18 +63,19 @@ class Engine:
                     log.warning("Noise reduction failed; retaining normalized input: %s", type(error).__name__)
                     noise = {"status": "failed", "method": "fft", "reductionDb": 0}
             t1 = time.time()
-            tr = self.transcriber.transcribe(wav, language=req.language, mode=req.mode, hotwords=req.hotwords)
+            tr = transcriber.transcribe(wav, language=req.language, mode=req.mode, hotwords=req.hotwords)
             t2 = time.time()
             turns: list[Turn] = []
-            if self.diarizer is not None and req.diarization.enabled:
-                turns = self.diarizer.diarize(wav, min_speakers=req.diarization.min_speakers, max_speakers=req.diarization.max_speakers)
+            if diarizer is not None and req.diarization.enabled and tr.words:
+                turns = diarizer.diarize(wav, min_speakers=req.diarization.min_speakers, max_speakers=req.diarization.max_speakers)
             t3 = time.time()
-            raw = build_response(req, tr.words, tr.language, tr.language_probability, turns, duration, self.transcriber.name, {
+            raw = build_response(req, tr.words, tr.language, tr.language_probability, turns, duration, transcriber.name, {
                 "prepSec": round(t1 - t0, 2),
                 "sttSec": round(t2 - t1, 2),
                 "diarizeSec": round(t3 - t2, 2),
                 "wordCount": len(tr.words),
                 "turnCount": len(turns),
+                **({"speechModelRevisions": self.registry.provenance()} if self.registry else {}),
             })
             return process_transcript(raw, req, wav, Path(tmp), self.s3, noise, bitrate_kbps=mp3_export_bitrate(src))
 
@@ -102,4 +109,5 @@ def build_response(
         speakers=speaker_stats(segments),
         segments=segments,
         stats=stats,
+        speechModels=req.speechModels,
     )

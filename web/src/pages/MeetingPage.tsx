@@ -1,4 +1,5 @@
 import { ProcessedMedia } from "../components/ProcessedMedia";
+import { SpeechModelSummary } from "../components/SpeechModels";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -131,6 +132,7 @@ export function MeetingPage() {
         </button>
       )}
       <ProcessedMedia result={q.data} refresh={async () => (await q.refetch({ throwOnError: true })).data} />
+      <SpeechModelSummary selection={meeting.transcriptSpeechModels ?? meeting.speechModels} />
       {hasContent && <Segmented className="mt-5" options={TABS.filter((t) => (t.value === "transcript" ? !!transcriptUrl : t.value === "mindmap" ? !!doc?.mindmap : !!doc))} value={tab} onChange={setTab} />}
       {doc && <button type="button" className="tap mt-4 flex w-full items-center justify-between rounded-xl border border-accent/30 bg-accent-soft px-4 py-3 text-[13px] font-medium text-accent" onClick={() => { setTab("summary"); setBriefJump((n) => n + 1); }}>핵심 요약 보기<IconChevronRight size={15} /></button>}
 

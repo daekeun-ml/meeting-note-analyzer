@@ -1,4 +1,5 @@
 import { ProcessedMedia } from "../components/ProcessedMedia";
+import { SpeechModelSummary } from "../components/SpeechModels";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -73,6 +74,7 @@ export function LecturePage() {
       <LectureExportButton key={document.generatedAt} document={document} compact />
     </div>}
     <ProcessedMedia result={query.data} refresh={async () => (await query.refetch({ throwOnError: true })).data} />
+    {lecture.hasAudio !== false && <SpeechModelSummary selection={lecture.transcriptSpeechModels ?? lecture.speechModels} />}
     {document && <LectureSharing key={id} lectureId={id} open={sharingOpen} onClose={() => showSharing(false)} />}
     {customPrompt && <details className="mt-3 text-sm"><summary className="cursor-pointer text-ink-3">추가 요청</summary><p className="mt-2 whitespace-pre-wrap leading-relaxed">{customPrompt}</p></details>}
     {document?.selectedPages && <Card className="mt-3 p-4"><p className="text-sm font-semibold">분석 범위: {formatSlidePages(document.selectedPages)}페이지</p>

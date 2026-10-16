@@ -1,5 +1,6 @@
 import { DEFAULT_AUDIO_PROCESSING } from "@meeting-notes/shared";
 import { AudioProcessingSettings } from "../components/AudioProcessingSettings";
+import { UploadSpeechModels, useSpeechModelChoice } from "../components/SpeechModels";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -20,11 +21,13 @@ export function InterviewUploadForm() {
   const [parts, setParts] = useState<Partial<Record<"audio" | "resume", UploadedPart[]>>>({});
   const [uploaded, setUploaded] = useState({ audio: false, resume: false });
   const [busy, setBusy] = useState(false); const [progress, setProgress] = useState(0); const [error, setError] = useState("");
+  const speech = useSpeechModelChoice(busy || !!plan);
+  const speechLanguage = speech.value.stt === "ark-asr" ? "en" : languageHint;
   async function submit() {
-    if (!file || badResume) return;
+    if (!file || badResume || speech.loading) return;
     setBusy(true); setError("");
     try {
-      const input = createInterviewSchema.parse({ title, languageHint, settings, audioProcessing, audio: { fileName: file.name, fileSize: file.size, contentType: "audio/mpeg" },
+      const input = createInterviewSchema.parse({ title, languageHint: speechLanguage, settings, audioProcessing, speechModels: speech.value, audio: { fileName: file.name, fileSize: file.size, contentType: "audio/mpeg" },
         resume: resume ? { fileName: resume.name, fileSize: resume.size, contentType: "application/pdf" } : undefined });
       const created = plan ?? await api.createInterview(input); setPlan(created);
       for (const asset of ["resume", "audio"] as const) {
@@ -57,13 +60,14 @@ export function InterviewUploadForm() {
         {(resume || badResume) && <Button size="sm" variant="ghost" className="mt-2" onClick={() => { setResume(null); setBadResume(false); setError(""); }}>이력서 첨부 취소</Button>}
       </div>
       <AudioProcessingSettings value={audioProcessing} onChange={setAudioProcessing} disabled={busy || !!plan} />
+      <UploadSpeechModels choice={speech} disabled={busy || !!plan} />
       <label className="block"><SectionLabel>인터뷰 제목</SectionLabel><input aria-label="인터뷰 제목" className={interviewInputClass} maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: ML 엔지니어 기술 인터뷰" /></label>
-      <label className="block"><SectionLabel>녹음에서 사용하는 언어</SectionLabel><select aria-label="인터뷰 녹음 언어" className={interviewInputClass} value={languageHint} onChange={(e) => setLanguageHint(e.target.value)}><option value="auto">자동 감지</option><option value="ko">한국어</option><option value="en">English</option><option value="ja">日本語</option><option value="zh">中文</option></select></label>
+      <label className="block"><SectionLabel>녹음에서 사용하는 언어</SectionLabel><select aria-label="인터뷰 녹음 언어" className={interviewInputClass} value={speechLanguage} disabled={speech.value.stt === "ark-asr"} onChange={(e) => setLanguageHint(e.target.value)}><option value="auto">자동 감지</option><option value="ko">한국어</option><option value="en">English</option><option value="ja">日本語</option><option value="zh">中文</option></select></label>
       <InterviewSettingsForm value={settings} onChange={setSettings} />
     </fieldset>
     {busy && <div className="mt-4" role="status"><p className="text-sm mb-2">업로드 및 인터뷰 분석 준비 {progress}%</p><ProgressBar value={progress} /></div>}
     {error && <InlineError>{error}</InlineError>}
-    <Button full className="mt-6" loading={busy} disabled={!file || badResume || !title.trim() || !settings.criteria.length} onClick={() => void submit()}>{plan ? "업로드 이어서 진행" : "인터뷰 노트 만들기"}</Button>
+    <Button full className="mt-6" loading={busy} disabled={speech.loading || !file || badResume || !title.trim() || !settings.criteria.length} onClick={() => void submit()}>{plan ? "업로드 이어서 진행" : "인터뷰 노트 만들기"}</Button>
     {plan && !busy && <Link to={`/interviews/${plan.interview.interviewId}`} className="block mt-3 text-center text-sm text-accent">등록된 인터뷰 보기 / 삭제</Link>}
     <p className="mt-3 text-xs text-ink-3 leading-relaxed">질문·후속 질문·후보자 답변을 정리하고, 힌트와 정정은 별도로 기록합니다. AI 의견은 발언 근거를 확인한 뒤 면접관이 검토하는 초안입니다.</p>
   </>;
