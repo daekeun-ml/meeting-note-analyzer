@@ -16,10 +16,16 @@ tables = [r["Properties"] for r in resources if r["Type"] == "AWS::DynamoDB::Tab
 assert len(tables) == 3 and all(table.get("DeletionProtectionEnabled") for table in tables)
 assert not any(r["Type"].startswith(("AWS::Route53::", "AWS::CertificateManager::")) for r in resources), "Unexpected custom domain dependency"
 clients = [r["Properties"] for r in resources if r["Type"] == "AWS::Cognito::UserPoolClient"]
-assert len(clients) == 1
-assert clients[0]["SupportedIdentityProviders"] == ["COGNITO"]
-assert clients[0]["AllowedOAuthFlows"] == ["code"]
-assert clients[0]["GenerateSecret"] is False
+assert len(clients) == 2, "Expected the web login and server-only lecture guest clients"
+web_client = next(client for client in clients if client.get("ClientName") == "web-pwa")
+assert web_client["SupportedIdentityProviders"] == ["COGNITO"]
+assert web_client["AllowedOAuthFlows"] == ["code"]
+assert web_client["GenerateSecret"] is False
+guest_client = next(client for client in clients if client.get("ClientName") == "lecture-share-email-verification")
+assert guest_client["GenerateSecret"] is True
+assert guest_client["ExplicitAuthFlows"] == ["ALLOW_USER_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
+assert not guest_client.get("AllowedOAuthFlows"), "Guest verification must go through the server"
+assert guest_client["ReadAttributes"] == ["email", "email_verified"]
 for resource in resources:
     if resource["Type"] == "AWS::CloudFront::Distribution":
         props = resource["Properties"]["DistributionConfig"]
@@ -27,4 +33,4 @@ for resource in resources:
         certificate = props.get("ViewerCertificate", {})
         assert not certificate or certificate.get("CloudFrontDefaultCertificate") is True
         assert "AcmCertificateArn" not in certificate and "IamCertificateId" not in certificate
-print(f"Verified {len(templates)} stack templates: CloudFront default certificate, no DNS dependency, Cognito password accounts.")
+print(f"Verified {len(templates)} stack templates: CloudFront default certificate, no DNS dependency, Cognito accounts and separate guest verification.")
