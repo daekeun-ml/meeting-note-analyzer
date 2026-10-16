@@ -137,7 +137,7 @@ def test_processed_artifacts_live_under_the_recording_and_original_transcript_is
     request = SttRequest(meetingId="m", audio_s3_uri="s3://bucket/lecture-results/m/video/audio.mp3",
         video_s3_uri="s3://bucket/lecture-uploads/u/m/video.mp4", kind="lecture")
     result = process_transcript(raw, request, tmp_path / "input.wav", tmp_path, s3,
-        {"status": "applied", "method": "fft", "reductionDb": 6}, bitrate_kbps=32)
+        {"status": "applied", "method": "fft", "reductionDb": 6}, bitrate_kbps=32, transcription_input="original")
     assert raw == snapshot
     assert [s.id for s in result.segments] == ["s3", "s4", "s5"]
     assert result.originalSegments == rows
@@ -146,6 +146,7 @@ def test_processed_artifacts_live_under_the_recording_and_original_transcript_is
     assert result.processing["media"]["video"]["startSec"] == 19
     assert result.processing["warnings"]
     assert rates == [32]
+    assert result.processing["transcriptionInput"] == "original"
 
 
 def test_deleted_recording_cannot_regrow_processed_files_after_a_late_upload(tmp_path, monkeypatch):

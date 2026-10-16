@@ -1,4 +1,5 @@
 import os
+import pytest
 
 os.environ["STT_SKIP_MODEL_LOAD"] = "1"
 
@@ -62,6 +63,40 @@ def test_invocations_rejects_too_long(monkeypatch):
     with TestClient(server.app) as c:
         r = c.post("/invocations", json={"meetingId": "m1", "audio_s3_uri": "s3://b/k.mp3"})
         assert r.status_code == 400 and "too long" in r.json()["error"]
+
+
+@pytest.mark.parametrize("denoise_status", ["applied", "skipped", "failed"])
+def test_listening_filter_never_changes_asr_or_diarization_input(monkeypatch, denoise_status):
+    seen = {}
+    class Transcriber(FakeTranscriber):
+        def transcribe(self, wav, **kwargs):
+            seen["asr"] = wav.read_bytes()
+            return super().transcribe(wav, **kwargs)
+    class Diarizer(FakeDiarizer):
+        def diarize(self, wav, **kwargs):
+            seen["diarization"] = wav.read_bytes()
+            return super().diarize(wav, **kwargs)
+    engine = Engine(Transcriber(), Diarizer())
+    monkeypatch.setattr(engine, "_download", lambda uri, dst: dst.write_bytes(b"mp3"))
+    monkeypatch.setattr("stt.inference.probe_duration", lambda path: 1.0)
+    monkeypatch.setattr("stt.inference.mp3_export_bitrate", lambda path: 32)
+    def normalize(source, target):
+        target.write_bytes(b"original")
+        return target
+    def denoise(source, target):
+        if denoise_status == "failed":
+            raise RuntimeError("Filter unavailable")
+        target.write_bytes(b"filtered")
+        return (target if denoise_status == "applied" else source), {"status": denoise_status}
+    def publish(raw, request, wav, workdir, s3, noise, **kwargs):
+        seen.update(media=wav.read_bytes(), noise=noise["status"], provenance=kwargs["transcription_input"])
+        return raw
+    monkeypatch.setattr("stt.inference.to_wav16k", normalize)
+    monkeypatch.setattr("stt.inference.reduce_noise", denoise)
+    monkeypatch.setattr("stt.inference.process_transcript", publish)
+    engine.process(SttRequest(meetingId="m", kind="meeting", audio_s3_uri="s3://b/m.mp3"))
+    assert seen == {"asr": b"original", "diarization": b"original", "noise": denoise_status,
+                    "media": b"filtered" if denoise_status == "applied" else b"original", "provenance": "original"}
 
 
 def test_ping_answers_while_a_job_is_running():

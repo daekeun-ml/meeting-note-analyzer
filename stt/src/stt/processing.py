@@ -37,7 +37,7 @@ def s3_parts(uri):
     return bucket, key
 
 
-def process_transcript(raw: SttResponse, request: SttRequest, wav: Path, workdir: Path, s3, noise: dict, scope_client=None, *, bitrate_kbps=64):
+def process_transcript(raw: SttResponse, request: SttRequest, wav: Path, workdir: Path, s3, noise: dict, scope_client=None, *, bitrate_kbps=64, transcription_input=None):
     if not any((request.processing.denoise, request.processing.trim, request.processing.terminology)):
         return raw
     bucket, _ = s3_parts(request.audio_s3_uri)
@@ -58,6 +58,10 @@ def process_transcript(raw: SttResponse, request: SttRequest, wav: Path, workdir
         talk[segment.speaker] = talk.get(segment.speaker, 0) + segment.end - segment.start
     processing = {"version": 1, "kind": request.kind, "noise": noise, "scope": scope,
                   "terms": terms, "media": {}, "warnings": []}
+    if transcription_input is not None:
+        if transcription_input != "original":
+            raise ValueError("Unsupported transcription input")
+        processing["transcriptionInput"] = transcription_input
     prefix = f"{PREFIXES[request.kind]}/{request.meetingId}/processed/{uuid.uuid4().hex}/"
     uploaded = []
     def check_after_upload():

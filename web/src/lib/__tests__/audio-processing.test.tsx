@@ -78,3 +78,9 @@ it("separates regenerated download audio from the original transcription preproc
   expect(element.textContent).toContain("약 4.5 dB");
   expect(element.textContent).toContain("기존 전사와 분석 결과는 유지");
 });
+
+it("explains that new transcription uses the original recording", async () => {
+  const processing = audioProcessingReportSchema.parse({ ...report(), transcriptionInput: "original" });
+  await act(async () => root.render(<ProcessedMedia result={{ processing }} refresh={async () => undefined} />));
+  expect(element.textContent).toContain("전사와 화자 분리는 원본 음성을 기준으로 처리");
+});

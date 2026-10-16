@@ -23,6 +23,7 @@ export const audioProcessingReportSchema = z.object({
   version: z.literal(1),
   kind: z.enum(["meeting", "lecture", "interview"]),
   noise: noiseReportSchema,
+  transcriptionInput: z.literal("original").optional(),
   // A derivative can be regenerated without changing the STT input or transcript.
   mediaNoise: noiseReportSchema.optional(),
   scope: z.object({

@@ -4,7 +4,7 @@ export function AudioProcessingSettings({ value, onChange, disabled = false }: {
   value: AudioProcessingOptions; onChange: (value: AudioProcessingOptions) => void; disabled?: boolean;
 }) {
   const options = [
-    ["denoise", "잡음 감소", "조용한 구간의 배경 잡음을 추정해 줄입니다. 목소리 보호를 위해 제거 강도를 제한합니다."],
+    ["denoise", "다운로드 음성의 잡음 감소", "조용한 구간의 잡음을 추정해 줄입니다. 전사와 화자 분리는 원본 음성을 기준으로 처리합니다."],
     ["trim", "확실한 앞뒤 잡담 제외", "명확한 시작 또는 종료 근거가 있는 주변 대화만 분석에서 제외합니다."],
     ["terminology", "전문용어 표기 교정", "AWS, ML, 면접 용어의 알려진 표기 변형을 사전과 대조합니다."],
   ] as const;

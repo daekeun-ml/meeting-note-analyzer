@@ -54,10 +54,11 @@ class Engine:
             if duration > MAX_DURATION_SEC:
                 raise ValueError(f"audio too long: {duration:.0f}s > {MAX_DURATION_SEC:.0f}s")
             wav = to_wav16k(src, Path(tmp) / "audio.wav")
+            media_wav = wav
             noise = {"status": "disabled", "method": "fft", "reductionDb": 0}
             if req.processing.denoise:
                 try:
-                    wav, noise = reduce_noise(wav, Path(tmp) / "denoised.wav")
+                    media_wav, noise = reduce_noise(wav, Path(tmp) / "denoised.wav")
                 except Exception as error:
                     log.warning("Noise reduction failed; retaining normalized input: %s", type(error).__name__)
                     noise = {"status": "failed", "method": "fft", "reductionDb": 0}
@@ -76,7 +77,10 @@ class Engine:
                 "turnCount": len(turns),
                 **({"speechModelRevisions": self.registry.provenance()} if self.registry else {}),
             })
-            return process_transcript(raw, req, wav, Path(tmp), self.s3, noise, bitrate_kbps=mp3_export_bitrate(src))
+            # A cleaner listening copy is not evidence of better recognition.
+            # Keep ASR and speaker embeddings on the normalized original audio.
+            return process_transcript(raw, req, media_wav, Path(tmp), self.s3, noise,
+                                      bitrate_kbps=mp3_export_bitrate(src), transcription_input="original")
 
     def _download(self, uri: str, dst: Path) -> None:
         if not uri.startswith("s3://"):
