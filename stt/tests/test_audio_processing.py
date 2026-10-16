@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from stt.audio import denoise_wav, estimate_noise_floor, export_mp3, export_video, probe_duration, to_wav16k
+from stt.audio import denoise_wav, estimate_noise_floor, export_mp3, export_video, mp3_export_bitrate, probe_duration, to_wav16k
 
 pytestmark = pytest.mark.skipif(not shutil.which("ffmpeg") or not shutil.which("ffprobe"), reason="ffmpeg and ffprobe required")
 
@@ -44,6 +44,31 @@ def test_clean_voiced_audio_does_not_become_a_noise_profile(tmp_path):
     source = tmp_path / "clean.wav"
     sf.write(source, .3 * np.sin(2 * np.pi * 220 * time) + .1 * np.sin(2 * np.pi * 660 * time), rate)
     assert estimate_noise_floor(source) == -80
+
+
+@pytest.mark.parametrize("original_rate,expected_rate", [(16, 16), (32, 32), (64, 64), (128, 64)])
+def test_processed_speech_mp3_does_not_inflate_low_bitrate_sources(tmp_path, original_rate, expected_rate):
+    source, wav, output = tmp_path / "source.mp3", tmp_path / "speech.wav", tmp_path / "output.mp3"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=220:sample_rate=16000:duration=20",
+                    "-c:a", "libmp3lame", "-b:a", f"{original_rate}k", str(source)], check=True)
+    to_wav16k(source, wav)
+    bitrate = mp3_export_bitrate(source)
+    assert bitrate == expected_rate
+    export_mp3(wav, output, 0, 20, bitrate_kbps=bitrate)
+    info = json.loads(subprocess.check_output(["ffprobe", "-v", "error", "-show_streams", "-of", "json", str(output)]))["streams"][0]
+    assert int(info["bit_rate"]) == expected_rate * 1000
+    assert info["channels"] == 1 and int(info["sample_rate"]) == 16000
+    assert output.stat().st_size <= source.stat().st_size * 1.03
+    assert abs(probe_duration(output) - 20) < .2
+
+
+def test_bitrate_probe_falls_back_to_container_rate_then_bounded_speech_default(tmp_path, monkeypatch):
+    monkeypatch.setattr("stt.audio.run_media", lambda *args, **kwargs: json.dumps({
+        "streams": [{"bit_rate": "N/A"}], "format": {"bit_rate": "31674"},
+    }).encode())
+    assert mp3_export_bitrate(tmp_path / "source.mp3") == 32
+    monkeypatch.setattr("stt.audio.run_media", lambda *args, **kwargs: b'{"streams":[{}]}')
+    assert mp3_export_bitrate(tmp_path / "unknown.mp3") == 64
 
 
 def test_mp4_keeps_video_codec_and_aligns_the_processed_audio_to_an_earlier_keyframe(tmp_path):

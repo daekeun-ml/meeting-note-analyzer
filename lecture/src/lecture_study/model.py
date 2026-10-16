@@ -57,6 +57,9 @@ class Model:
     def prepare_output(self, value):
         return value
 
+    def prepare_for_schema(self, schema, value):
+        return self.prepare_output(value)
+
     def generate(self, schema: type[T], task: str, data: dict, image: Path | None = None, validate=None, images: list[Path] | None = None, max_output_tokens: int = 8192) -> T:
         if not 1 <= max_output_tokens <= MAX_OUTPUT_TOKENS:
             raise ValueError("Model output budget is outside the supported range")
@@ -94,6 +97,7 @@ class Model:
                 self.output_tokens += response.get("usage", {}).get("outputTokens", 0)
             log.info("model task=%s model=%s attempt=%d usage=%s", schema.__name__, model_id, attempt + 1, response.get("usage"))
             previous_output = None
+            prepared = None
             try:
                 if response.get("stopReason") == "max_tokens":
                     previous_budget = output_budget
@@ -108,15 +112,29 @@ class Model:
                     raise ValueError(f"Expected complete structured output, got {response.get('stopReason')}")
                 block = next(b["toolUse"] for b in response["output"]["message"]["content"] if b.get("toolUse", {}).get("name") == "deliver")
                 previous_output = block["input"]
-                value = schema.model_validate(self.prepare_output(previous_output))
+                prepared = self.prepare_for_schema(schema, previous_output)
+                previous_output = prepared
+                value = schema.model_validate(prepared)
                 if validate:
                     validate(value)
                 return value
             except (ValueError, ValidationError, KeyError, StopIteration) as exc:
                 if isinstance(exc, ValidationError):
                     # Report actionable field paths without leaking candidate/source text into job errors.
-                    errors = exc.errors(include_url=False, include_context=False, include_input=False)
-                    detail = "\n".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in errors)
+                    errors = exc.errors(include_url=False, include_input=False)
+                    details = []
+                    for error in errors:
+                        message = error["msg"]
+                        if error["type"] == "string_too_long":
+                            field = prepared
+                            for key in error["loc"]:
+                                field = field.get(key) if isinstance(field, dict) else field[key] if isinstance(field, list) and isinstance(key, int) and key < len(field) else None
+                            if isinstance(field, str):
+                                limit = error["ctx"]["max_length"]
+                                message += (f" (currently {len(field)} Unicode characters, including spaces, Markdown and LaTeX). "
+                                            f"Rewrite concisely toward {int(limit * .6)} characters; do not cut a sentence or formula mid-way.")
+                        details.append(f"{'.'.join(map(str, error['loc']))}: {message}")
+                    detail = "\n".join(details)
                 else:
                     detail = str(exc) or "The deliver tool output is missing."
                 correction = f"Correct the previous output: {detail[:6000]}"

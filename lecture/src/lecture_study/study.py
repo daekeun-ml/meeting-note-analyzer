@@ -12,6 +12,13 @@ move those pages' lessons into this section. For a contents/outline/title page, 
 do not teach the topics listed there or derive formulas from other pages. Return empty mathNotes, questions and cards
 when this section contains no actual mathematics or substantive teaching.
 Keep the deliver object focused, normally within 5,000 output tokens. Array limits are ceilings, not targets.
+Field lengths are Unicode CHARACTER counts, including spaces, Markdown and LaTeX, not token counts.
+Aim for slideSummary at 600-1,200 characters (hard maximum 3,000), spokenSummary at 800-2,000
+(hard maximum 5,000), and explanation at 1,500-3,500 (hard maximum 5,000). These are upper drafting
+targets, not minimum lengths; brief or speech-free sections should be much shorter or empty as required.
+Keep slideSummary a summary even for a group of source pages. Put detailed reasoning and derivations in
+explanation and mathNotes without duplicating them in slideSummary. Learner requests for detail do not
+override the field limits. Consolidation of partial notes must also stay within these same limits.
 Explain each current formula once in mathNotes, grouping closely related forms. Do not repeat the same derivation
 in explanation, concept definitions, questions and flashcards. Keep the essential justified transformations,
 symbol meanings, assumptions and source corrections; do not expand unrelated prerequisite chapters.

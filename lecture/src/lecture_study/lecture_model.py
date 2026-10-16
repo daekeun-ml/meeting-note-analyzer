@@ -8,6 +8,7 @@ from .model import Model, SYSTEM
 from .schemas import Overview, Papers, SlideReading, Study, VideoMatch, VideoObservation
 from .text import normalize_generated_text, validate_math_format
 from .preferences import LecturePreferences, preferences_prompt
+from .study_length import repair_study_length
 
 ROUTING_VERSION = "opus-led-v2-markdown"
 FAST_SCHEMAS = frozenset({DeckScope, SlideReading, VideoObservation, VideoMatch, Papers})
@@ -55,6 +56,12 @@ class LectureModel(Model):
         normalized = normalize_generated_text(value)
         validate_math_format(normalized)
         return normalized
+
+    def prepare_for_schema(self, schema, value):
+        normalized = self.prepare_output(value)
+        # Length repair uses the same Opus/Sonnet choice, liveness checks and call
+        # budget. Revalidate the complete Study and its references in Model.generate.
+        return repair_study_length(self, normalized) if schema is Study else normalized
 
 
 class AnalysisCache:

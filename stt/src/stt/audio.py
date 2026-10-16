@@ -81,9 +81,34 @@ def denoise_wav(source: Path, destination: Path, noise_floor_db: float | None = 
     return destination
 
 
-def export_mp3(source: Path, destination: Path, start: float, end: float):
+MP3_SPEECH_BITRATES = (8, 16, 24, 32, 40, 48, 56, 64)
+
+
+def mp3_export_bitrate(source: Path) -> int:
+    """Preserve low-bitrate sources; 16 kHz mono speech needs at most 64 kbps here."""
+    try:
+        info = json.loads(run_media(["ffprobe", "-v", "error", "-select_streams", "a:0",
+            "-show_entries", "stream=bit_rate:format=bit_rate", "-of", "json", str(source)], timeout=30))
+        stream = next(iter(info.get("streams", [])), {})
+        for candidate in (stream.get("bit_rate"), info.get("format", {}).get("bit_rate")):
+            try:
+                rate = float(candidate) / 1000
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(rate) and rate > 0:
+                # Small header/estimation differences must not turn nominal 32 kbps into 24.
+                return max((value for value in MP3_SPEECH_BITRATES if value <= rate * 1.02), default=8)
+    except (RuntimeError, ValueError, TypeError):
+        pass
+    return 64
+
+
+def export_mp3(source: Path, destination: Path, start: float, end: float, *, bitrate_kbps: int = 64):
+    if bitrate_kbps not in MP3_SPEECH_BITRATES:
+        raise ValueError("Unsupported speech MP3 bitrate")
     run_media(["ffmpeg", "-nostdin", "-y", "-v", "error", "-ss", str(start), "-i", str(source),
-               "-t", str(end - start), "-map", "0:a:0", "-c:a", "libmp3lame", "-b:a", "128k",
+               "-t", str(end - start), "-map", "0:a:0", "-ac", "1", "-ar", "16000",
+               "-c:a", "libmp3lame", "-b:a", f"{bitrate_kbps}k",
                "-metadata", f"comment=Original recording start: {start:.3f} seconds", str(destination)])
 
 

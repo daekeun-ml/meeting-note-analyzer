@@ -37,7 +37,7 @@ def s3_parts(uri):
     return bucket, key
 
 
-def process_transcript(raw: SttResponse, request: SttRequest, wav: Path, workdir: Path, s3, noise: dict, scope_client=None):
+def process_transcript(raw: SttResponse, request: SttRequest, wav: Path, workdir: Path, s3, noise: dict, scope_client=None, *, bitrate_kbps=64):
     if not any((request.processing.denoise, request.processing.trim, request.processing.terminology)):
         return raw
     bucket, _ = s3_parts(request.audio_s3_uri)
@@ -77,7 +77,7 @@ def process_transcript(raw: SttResponse, request: SttRequest, wav: Path, workdir
     start, end = scope["startSec"], scope["endSec"]
     audio = workdir / "processed.mp3"
     try:
-        export_mp3(wav, audio, start, end)
+        export_mp3(wav, audio, start, end, bitrate_kbps=bitrate_kbps)
         key = prefix + "audio.mp3"
         upload(audio, key, "audio/mpeg")
         processing["media"]["audio"] = {"key": key, "startSec": start, "endSec": end}

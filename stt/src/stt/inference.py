@@ -12,7 +12,7 @@ from typing import Protocol
 import boto3
 
 from .align import Turn, assign_speakers, build_segments, relabel_speakers, speaker_stats
-from .audio import denoise_wav, estimate_noise_floor, probe_duration, to_wav16k
+from .audio import denoise_wav, estimate_noise_floor, mp3_export_bitrate, probe_duration, to_wav16k
 from .processing import process_transcript
 from .schemas import SttRequest, SttResponse, Word
 
@@ -70,7 +70,7 @@ class Engine:
                 "wordCount": len(tr.words),
                 "turnCount": len(turns),
             })
-            return process_transcript(raw, req, wav, Path(tmp), self.s3, noise)
+            return process_transcript(raw, req, wav, Path(tmp), self.s3, noise, bitrate_kbps=mp3_export_bitrate(src))
 
     def _download(self, uri: str, dst: Path) -> None:
         if not uri.startswith("s3://"):

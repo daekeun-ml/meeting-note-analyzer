@@ -47,6 +47,8 @@ Existing documents stay readable. **학습 설명 업데이트** reruns a comple
 
 Descriptions render Markdown headings, emphasis, lists, tables and code alongside LaTeX in owner, guest, and PDF views. Existing escaped paragraph breaks and quotes are repaired for display. Math supports dollar and backslash delimiters, plus common legacy notation such as `η_opt`, `v^t`, `t/T` and `1-α^t`. Code and URLs remain intact. New outputs are normalized and checked for recognizable unmarked or unclosed LaTeX before saving. Missing source characters are not reconstructed by the renderer.
 
+Study prompts specify character targets separately from the model's token budget. If a summary or explanation still exceeds its field limit, the same reasoning model rewrites only the overlong fields. Formulas, source checks, references, questions and other fields stay intact, and the complete result is validated again. Repairs share the attempt's model-call budget and never truncate a string mid-sentence or mid-formula. Previously validated section caches remain reusable when retrying a length failure.
+
 The lecture, meeting, and interview collection lists show 10 records per page by default, with previous/next buttons, page numbers, and a 10/20/50-record selector. Moving forward fetches additional cursor batches as needed without appending every card to the screen. Returning from a detail page retains the list position and page size during the session. A failed fetch keeps the current page, and a final empty API batch does not create an empty display page.
 
 Lecture summaries, explanations, and math notes remain continuous within their existing study sections. Guest study sections can be expanded individually. PDF and Markdown downloads include the complete document.
