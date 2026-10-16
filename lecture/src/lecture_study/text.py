@@ -1,7 +1,8 @@
 """Repair presentation escapes without decoding Unicode or LaTeX as JSON."""
 import re
+from .math_markup import inline_math_linewrap, markup_spans
 
-CODE = re.compile(r"(```[\s\S]*?```|`[^`\n]*`|https?://[^\s<>()]+)")
+CODE = re.compile(r"(```[\s\S]*?```|`[^`\n]*`|https?://[^\s<>(){}]+|[A-Za-z]:\\[^\s<>()]+)")
 MATH = re.compile(r"\$\$[\s\S]+?\$\$|(?<!\\)\$(?:\\.|[^$\\\n])+\$|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\]")
 COMMANDS = r"arg|max|min|sum|prod|int|lim|log|ln|exp|frac|dfrac|tfrac|sqrt|alpha|beta|gamma|delta|theta|lambda|mu|nu|sigma|phi|omega|eta|nabla|partial|cdots|ldots|times|cdot|left|right|begin|end|text|mathrm|mathbf|mathbb"
 DOUBLE_COMMAND = re.compile(r"(?<!\\)\\\\(?=(?:" + COMMANDS + r")(?![A-Za-z])|[()[\]])")
@@ -34,27 +35,30 @@ def _prose(text):
     def equation(match):
         raw = match.group()
         expression = raw.rstrip(" .,;:!?\t")
+        if expression.count("{") != expression.count("}"):
+            return raw  # A Korean word inside \text{...} is not the end of the formula.
         return "$" + expression + "$" + raw[len(expression):]
 
     value = BARE_MATH.sub(equation, text)
-    parts, end = [], 0
-    for match in MATH.finditer(value):
-        parts.extend((LEGACY_EXPRESSION.sub(_legacy_math, value[end:match.start()]), match.group()))
-        end = match.end()
-    return "".join(parts) + LEGACY_EXPRESSION.sub(_legacy_math, value[end:])
+    parts = []
+    for kind, start, end in markup_spans(value):
+        part = value[start:end]
+        parts.append(LEGACY_EXPRESSION.sub(_legacy_math, part) if kind == "prose" else part)
+    return "".join(parts)
 
 
 def normalize_text(text: str) -> str:
     def chunk(value):
         value = DOUBLE_COMMAND.sub(lambda _: "\\", value)
-        parts, end = [], 0
-        for match in MATH.finditer(value):
-            parts.extend((_prose(value[end:match.start()]), match.group()))
-            end = match.end()
-        parts.append(_prose(value[end:]))
+        parts = []
+        for kind, start, end in markup_spans(value):
+            part = value[start:end]
+            parts.append(_prose(part) if kind == "prose" else inline_math_linewrap(part) if kind == "math" else part)
         return "".join(parts)
 
-    return "".join(part if i % 2 else chunk(part) for i, part in enumerate(CODE.split(text.replace("\r\n", "\n"))))
+    value = text.replace("\r\n", "\n")
+    return "".join(value[start:end] if kind == "code" else chunk(value[start:end])
+                   for kind, start, end in markup_spans(value))
 
 
 def normalize_generated_text(value):
@@ -67,18 +71,38 @@ def normalize_generated_text(value):
     return value
 
 
-def validate_math_format(value, path="output"):
-    """Catch recognizable unclosed/unmarked formulas and request a grounded repair."""
+def math_issues(value, path=()):
+    """Return structural paths and precise positions without logging source prose."""
     if isinstance(value, dict):
+        found = []
         for key, item in value.items():
-            validate_math_format(item, f"{path}.{key}")
+            found.extend(math_issues(item, (*path, key)))
+        return found
     elif isinstance(value, list):
+        found = []
         for index, item in enumerate(value):
-            validate_math_format(item, f"{path}[{index}]")
+            found.extend(math_issues(item, (*path, index)))
+        return found
     elif isinstance(value, str):
-        for index, part in enumerate(CODE.split(value)):
-            if index % 2:
+        found = []
+        for kind, start, end in markup_spans(value):
+            if kind != "prose":
                 continue
-            prose = MATH.sub("", part)
-            if re.search(r"(?<!\\)\\(?:" + COMMANDS + r")(?![A-Za-z])|(?<!\\)\$(?=[A-Za-z\\({])", prose):
-                raise ValueError(f"{path}: put complete formulas and mathematical symbols inside $...$ or $$...$$. Preserve the source meaning and do not delete the formula.")
+            for match in re.finditer(r"(?<!\\)\\(?:" + COMMANDS + r")(?![A-Za-z])|(?<!\\)\$(?=[A-Za-z\\({])|(?<!\\)\\[()[\]]", value[start:end]):
+                offset = start + match.start()
+                found.append({"path": path, "offset": offset, "line": value.count("\n", 0, offset) + 1,
+                              "column": offset - value.rfind("\n", 0, offset),
+                              "reason": "bare LaTeX command" if re.match(r"\\[A-Za-z]", match.group()) else "unclosed math delimiter"})
+        return found
+    return []
+
+
+def validate_math_format(value, path="output"):
+    from .text_integrity import field_path
+    issues = math_issues(value)
+    if issues:
+        issue = issues[0]
+        location = field_path(issue["path"], path)
+        raise ValueError(f"{location} (line {issue['line']}, column {issue['column']}, {issue['reason']}): "
+                         "put complete formulas and mathematical symbols inside $...$ or $$...$$. "
+                         "Preserve the source meaning and do not delete the formula.")

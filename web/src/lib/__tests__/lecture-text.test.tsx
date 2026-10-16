@@ -67,3 +67,27 @@ it("renders the reported Markdown lists and unmarked learning-rate notation as m
   expect(element.textContent).not.toContain("η_opt");
   expect(normalizeLectureText("module_name, file_id, https://example.org/v_t")).toBe("module_name, file_id, https://example.org/v_t");
 });
+
+it("renders currency, backticks inside math and wrapped inline equations without corrupting them", async () => {
+  const text = "비용은 $20 또는 $30이며 학습률은 $\\eta$입니다.\n\n" +
+    "단어는 $\\text{`bank`}$로 표시합니다.\n\n" +
+    "수식 $\\alpha +\n\\beta$를 사용합니다.";
+  await act(async () => root.render(<LectureText text={text} />));
+  expect(element.textContent).toContain("$20");
+  expect(element.textContent).toContain("$30");
+  expect(element.querySelectorAll(".katex")).toHaveLength(3);
+  expect(element.querySelector(".katex-error")).toBeNull();
+  expect(normalizeLectureText(normalizeLectureText(text))).toBe(normalizeLectureText(text));
+});
+
+it("preserves multi-backtick and tilde code fences and Windows paths", async () => {
+  const text = "````python\ntext = '``` $x'\n\\nabla f(x)\n````\n\n" +
+    "~~~python\nprint('$x')\n\\nabla f(x)\n~~~\n\n" +
+    "코드 ``print(`x`, '\\nabla')``와 경로 C:\\text\\notes, 수식 $\\alpha$입니다.";
+  expect(normalizeLectureText(text)).toBe(text);
+  await act(async () => root.render(<LectureText text={text} />));
+  expect(element.querySelectorAll("pre")).toHaveLength(2);
+  expect(element.querySelectorAll(".katex")).toHaveLength(1);
+  expect(element.querySelector(".katex-error")).toBeNull();
+  expect(element.textContent).toContain("C:\\text\\notes");
+});
