@@ -2,7 +2,7 @@ import copy
 
 import pytest
 
-from lecture_study.interview_presentation import brief_interviewer_context, concise_reading_notes, korean_resume_notes
+from lecture_study.interview_presentation import brief_interviewer_context, concise_reading_notes, korean_resume_notes, reading_hint, reading_text
 from test_pipeline import FakeStore
 
 
@@ -31,7 +31,7 @@ def test_brief_hints_use_only_interviewer_context_keep_original_evidence_and_are
     model = Model()
     result = brief_interviewer_context(rows, model, store.cached, "ko", lambda: None)
     assert rows == original
-    assert result[0]["briefInterviewerContext"] == ["BERT·S-BERT를 관련 맥락으로 언급함."]
+    assert result[0]["briefInterviewerContext"] == ["BERT, S-BERT를 관련 맥락으로 언급함."]
     assert result[0]["answer"] == original[0]["answer"] and result[0]["interviewerContext"] == original[0]["interviewerContext"]
     assert result[1]["briefInterviewerContext"] == []
     assert brief_interviewer_context(rows, model, store.cached, "ko", lambda: None) == result
@@ -65,7 +65,7 @@ def test_brief_hint_generation_rejects_unrelated_question_keys_and_internal_ids(
     assert result[0] == rows[0]  # Preserve the original, not the invalid summary.
 
 
-def test_reading_copy_has_a_total_quarter_budget_and_keeps_wrong_answers_separate_from_hints():
+def test_reading_copy_has_a_total_forty_percent_budget_and_keeps_wrong_answers_separate_from_hints():
     rows, store = exchanges(), FakeStore(None)
     wrong = "신뢰도가 높은 예제의 가중치를 키운다고 설명했고 구체적인 식은 설명하지 못한다고 답했다."
     rows[0]["answer"] = [{"text": wrong, "segmentIds": ["s2"]}]
@@ -78,7 +78,7 @@ def test_reading_copy_has_a_total_quarter_budget_and_keeps_wrong_answers_separat
             first = data["items"][0]
             assert first["answer"] == [wrong]
             assert first["interviewerHints"] == rows[0]["briefInterviewerContext"]
-            assert first["answerTargetCharacters"] == max(15, round(len(wrong) / 4))
+            assert first["answerTargetCharacters"] == max(15, round(len(wrong) * 0.4))
             assert "resumeClaimIds" not in str(data) and "uncertainty" not in str(data)
             value = schema(q1={"topic": "ML", "question": "가중치 방향은?", "answer": ["높은 신뢰도에 가중치 증가, 식은 설명 못함."], "hint": "어려운 예제에 집중하도록 보충"},
                            q2={"topic": "ML", "question": "다른 질문", "answer": [], "hint": None})
@@ -119,3 +119,12 @@ def test_korean_resume_reading_copy_preserves_status_evidence_and_original_revie
     assert reviews == original
     assert result[0]["status"] == "not_tested" and result[0]["exchangeIds"] == []
     assert result[0]["readingNotes"]["explanation"] == "면접에서 구체적으로 검증하지 않은 항목입니다."
+
+
+def test_reading_copy_omits_admin_hints_and_generic_annotations_without_hiding_real_uncertainty():
+    assert reading_hint("설명 기반으로 후속 질문 예정이라 안내") is None
+    source = "캐시·검색을 분리했다 — 실제 배포 여부는 확실하지 않다고 답함. (일부 발화 불명확)"
+    cleaned = reading_text(source)
+    assert "실제 배포 여부는 확실하지" in cleaned
+    assert all(marker not in cleaned for marker in ("·", "—", "(일부 발화 불명확)"))
+    assert reading_text(r"벡터 $x \cdot y$와 `a—b`") == r"벡터 $x \cdot y$와 `a—b`"

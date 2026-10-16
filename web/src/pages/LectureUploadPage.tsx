@@ -1,10 +1,11 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { LECTURE_LIMITS, SLIDE_TYPES, createLectureSchema, type CreateLectureResponse, type OutputLanguage } from "@meeting-notes/shared";
 import { useApi } from "../lib/api";
 import { uploadMultipart, type UploadedPart } from "../lib/upload";
-import { Button, Card, InlineError, ProgressBar, SectionLabel, Segmented } from "../components/ui";
+import { Button, InlineError, ProgressBar, SectionLabel, Segmented } from "../components/ui";
+import { FilePicker } from "../components/FilePicker";
 import { IconVideo, IconStudy, IconFileAudio } from "../components/icons";
 
 /** Lecture media and optional deck upload, with resumable multipart completion. */
@@ -15,7 +16,7 @@ export function LectureUploadForm() {
   const [slideRange, setSlideRange] = useState("");
   const [mediaKind, setMediaKind] = useState<"video" | "audio">("video");
   const [media, setMedia] = useState<File | null>(null); const [slides, setSlides] = useState<File | null>(null);
-  const slidesInput = useRef<HTMLInputElement>(null); const [badSlides, setBadSlides] = useState(false);
+  const [badSlides, setBadSlides] = useState(false);
   const [language, setLanguage] = useState<OutputLanguage>("ko"); const [hint, setHint] = useState("auto");
   const [progress, setProgress] = useState(0); const [busy, setBusy] = useState(false); const [phase, setPhase] = useState("");
   const [error, setError] = useState(""); const [plan, setPlan] = useState<CreateLectureResponse | null>(null);
@@ -62,10 +63,17 @@ export function LectureUploadForm() {
   }
   const inputClass = "mt-2 w-full rounded-xl bg-surface border border-line px-3 h-12 text-[16px] focus:outline-none focus:border-accent";
   return <>
+    <p className="mb-4 text-xs text-ink-3">모델과 설명 방식은 <Link className="text-accent underline" to="/settings">강의 AI 설정</Link>의 기본값을 사용합니다. 이 강의의 설명 방식은 아래 추가 요청으로 조정할 수 있습니다.</p>
     <fieldset disabled={busy || !!plan} className="space-y-5 disabled:opacity-60">
       <div><SectionLabel>강의 파일 형식</SectionLabel><Segmented className="mt-2" value={mediaKind} onChange={(next) => { setMediaKind(next); setMedia(null); setError(""); }} options={[{ value: "video", label: "영상 MP4", icon: <IconVideo size={15} /> }, { value: "audio", label: "음성 MP3", icon: <IconFileAudio size={15} /> }]} /></div>
-      <Card className="p-4"><label className="block"><span className="flex items-center gap-2 font-semibold">{isVideo ? <IconVideo className="text-accent" /> : <IconFileAudio className="text-accent" />}{mediaLabel}</span><span className="block mt-1 text-xs text-ink-3">{isVideo ? "MP4 · 최대 4GB, 4시간, 4K" : "MP3 · 최대 500MB, 4시간"}</span><input key={mediaKind} aria-label={mediaLabel} type="file" accept={isVideo ? "video/mp4,.mp4" : "audio/mpeg,.mp3"} className="block mt-3 w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-surface-3 file:px-3 file:py-2 file:text-ink" onChange={(e) => chooseMedia(e.target.files?.[0] ?? null)} /></label></Card>
-      <Card className="p-4"><label className="block"><span className="flex items-center gap-2 font-semibold"><IconStudy className="text-accent" />장표 첨부 <span className="text-xs font-normal text-ink-3">선택</span></span><span className="block mt-1 text-xs text-ink-3">PPTX 또는 PDF · 최대 100MB, 120장</span><input ref={slidesInput} aria-label="강의 장표 (선택)" type="file" accept=".pptx,.pdf" className="block mt-3 w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-surface-3 file:px-3 file:py-2 file:text-ink" onChange={(e) => chooseSlides(e.target.files?.[0] ?? null)} /></label><p className="text-xs text-ink-3 leading-relaxed mt-3">{isVideo ? "첨부하면 영상 속 화면을 원본 장표와 대조합니다. 장표 없이 영상만 올려도 분석할 수 있습니다." : "첨부하면 발언과 장표를 연결해 이론과 수식을 설명합니다. 장표 없이 음성만 올리면 발언을 주제별로 정리합니다."}</p>{(slides || badSlides) && <Button variant="ghost" size="sm" className="mt-2" onClick={() => { chooseSlides(null); if (slidesInput.current) slidesInput.current.value = ""; }}>첨부 취소</Button>}</Card>
+      <FilePicker key={mediaKind} label={mediaLabel} accept={isVideo ? "video/mp4,.mp4" : "audio/mpeg,.mp3"} file={media}
+        disabled={busy || !!plan} onFile={chooseMedia} onError={setError} icon={isVideo ? <IconVideo className="text-accent" /> : <IconFileAudio className="text-accent" />}
+        hint={isVideo ? "MP4 · 최대 4GB, 4시간, 4K" : "MP3 · 최대 500MB, 4시간"} />
+      <div><FilePicker label="강의 장표 (선택)" accept=".pptx,.pdf" file={slides} disabled={busy || !!plan} onFile={chooseSlides} onError={setError}
+        icon={<IconStudy className="text-accent" />} hint="PPTX 또는 PDF · 최대 100MB, 120장" />
+        <p className="text-xs text-ink-3 leading-relaxed mt-3">첨부하면 선택한 장표와 발언을 연결해 설명합니다. 장표 없이 녹음이나 영상만 올려도 분석할 수 있습니다.</p>
+        {(slides || badSlides) && <Button variant="ghost" size="sm" className="mt-2" onClick={() => chooseSlides(null)}>첨부 취소</Button>}
+      </div>
       <label className="block"><SectionLabel>강의 제목</SectionLabel><input aria-label="강의 제목" maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 머신러닝 3주차 — 최적화" className={inputClass} /></label>
       <label className="block"><SectionLabel>과목명 (선택)</SectionLabel><input aria-label="과목명" maxLength={120} value={course} onChange={(e) => setCourse(e.target.value)} placeholder="예: 고급 머신러닝" className={inputClass} /></label>
       {slides && <label className="block"><SectionLabel>분석할 페이지 (선택)</SectionLabel>

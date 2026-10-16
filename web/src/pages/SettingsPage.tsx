@@ -7,6 +7,7 @@ import { currentSubscription, disablePush, enablePush, isIos, isStandalone, push
 import { safeAreaInsets, samples, syncAppHeight } from "../lib/viewport";
 import { IconBell, IconHome, IconLogOut, IconShare } from "../components/icons";
 import { Avatar, Button, Card, InlineError, Page, SectionLabel, Toggle } from "../components/ui";
+import { LecturePreferencesSettings } from "../components/LecturePreferencesSettings";
 
 export function SettingsPage() {
   const auth = useAuth();
@@ -59,6 +60,7 @@ export function SettingsPage() {
         </div>
       </Card>
 
+      <LecturePreferencesSettings />
       <div className="mt-6"><SectionLabel>알림</SectionLabel></div>
       <Card className="mt-2 p-4">
         <div className="flex items-center gap-3">

@@ -1,15 +1,21 @@
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyResultV2 } from "aws-lambda";
 import { z } from "zod";
-import { completeLectureUploadSchema, createLectureSchema, createLectureShareSchema, toLectureDto } from "@meeting-notes/shared";
+import { completeLectureUploadSchema, createLectureSchema, createLectureShareSchema, lecturePreferencesSchema, toLectureDto } from "@meeting-notes/shared";
 import { LectureLimitError, listLectures } from "@meeting-notes/backend";
 import { callerFrom, HttpError, json, parseBody, pathParam } from "../lib/http.js";
 import { completeLectureUpload, createLecture, lectureResult, ownedLecture, removeLecture, startLecture } from "../routes/lectures.js";
 import { createLectureShare, listLectureShares, revokeLectureShare } from "../routes/lecture-sharing.js";
+import { getLecturePreferences, saveLecturePreferences } from "../routes/lecture-preferences.js";
 
 export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): Promise<APIGatewayProxyResultV2> => {
   try {
     const caller = callerFrom(event);
-    if (event.routeKey === "POST /api/lectures") return json(201, await createLecture(caller, parseBody(event, createLectureSchema)));
+    if (event.routeKey === "GET /api/lecture-preferences") return json(200, await getLecturePreferences(caller));
+    if (event.routeKey === "PUT /api/lecture-preferences") return json(200, await saveLecturePreferences(caller, parseBody(event, lecturePreferencesSchema)));
+    if (event.routeKey === "POST /api/lectures") {
+      const input = parseBody(event, createLectureSchema);
+      return json(201, await createLecture(caller, { ...input, preferences: input.preferences ?? await getLecturePreferences(caller) }));
+    }
     if (event.routeKey === "GET /api/lectures") {
       const cursor = event.queryStringParameters?.["cursor"];
       if (cursor && (!/^[\w-]{1,2048}$/.test(cursor))) throw new HttpError(400, "invalid cursor");
@@ -31,7 +37,7 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       case "GET /api/lectures/{id}/result": return json(200, await lectureResult(caller, id));
       case "POST /api/lectures/{id}/complete-upload": await completeLectureUpload(caller, id, parseBody(event, completeLectureUploadSchema)); return json(204, {});
       case "POST /api/lectures/{id}/start": return json(202, await startLecture(caller, id));
-      case "POST /api/lectures/{id}/retry": return json(202, await startLecture(caller, id, true));
+      case "POST /api/lectures/{id}/retry": return json(202, await startLecture(caller, id, true, await getLecturePreferences(caller)));
       case "DELETE /api/lectures/{id}": await removeLecture(caller, id); return json(204, {});
       default: return json(404, { error: "not_found" });
     }

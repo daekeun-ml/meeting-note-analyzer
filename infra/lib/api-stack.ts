@@ -100,6 +100,7 @@ export class ApiStack extends Stack {
       ["/api/lectures/{id}/shares", [apigw.HttpMethod.GET, apigw.HttpMethod.POST]],
       ["/api/lectures/{id}/shares/{shareId}", [apigw.HttpMethod.DELETE]],
       ...["complete-upload", "start", "retry"].map((action): [string, apigw.HttpMethod[]] => [`/api/lectures/{id}/${action}`, [apigw.HttpMethod.POST]]),
+      ["/api/lecture-preferences", [apigw.HttpMethod.GET, apigw.HttpMethod.PUT]],
     ];
     for (const [path, methods] of lectureRoutes) this.httpApi.addRoutes({ path, methods, integration: lectureIntegration, authorizer });
     const guestIntegration = new HttpLambdaIntegration("GuestLectureIntegration", props.guestApiFunction);

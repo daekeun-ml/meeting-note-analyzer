@@ -21,7 +21,7 @@ it("keeps recorded Q&A and follow-ups in order, separately labels hints, and omi
   const result = simpleInterviewMarkdown(notes);
   expect(result).toContain("## Agent\n\n**Q: Agent를 설명해 주세요.**");
   expect(result).toContain("항상 같은 결과를 보장한다고 답했다."); // Wrong explanations are not silently corrected.
-  expect(result).toContain("**면접관 힌트·정정**\n\n- 외부 도구의 실행 결과도 고려하라고 보충했다.");
+  expect(result).toContain("**답변에 필요한 면접관 보충**\n\n- 외부 도구의 실행 결과도 고려하라고 보충했다.");
   expect(result).toContain("**f/u Q: 실패하면 어떻게 하나요?**");
   expect(result.indexOf("실패하면")).toBeLessThan(result.indexOf("## RAG"));
   expect(result).toContain("명확한 답변 없음.");
@@ -71,9 +71,9 @@ it("uses saved concise hint wording and respects an empty summary for administra
     exchange({ briefInterviewerContext: ["두 입력의 분석에 관한 단서를 제공함."] }),
     exchange({ id: "q2", question: "마지막 질문", briefInterviewerContext: [] }),
   ] });
-  expect(result).toContain("**면접관 힌트·정정**\n\n- 두 입력의 분석에 관한 단서를 제공함.");
+  expect(result).toContain("**답변에 필요한 면접관 보충**\n\n- 두 입력의 분석에 관한 단서를 제공함.");
   expect(result).not.toContain("외부 도구의 실행 결과");
-  expect((result.match(/\*\*면접관 힌트·정정\*\*/g) ?? [])).toHaveLength(1);
+  expect((result.match(/\*\*답변에 필요한 면접관 보충\*\*/g) ?? [])).toHaveLength(1);
 });
 
 it("uses compressed questions and answers in downloads without copying the original long notes", () => {
@@ -83,7 +83,7 @@ it("uses compressed questions and answers in downloads without copying the origi
   expect(result).toContain("**Q: 결과를 항상 같게 만들 수 있나요?**");
   expect(result).toContain("- 온도를 낮추면 항상 같은 결과라고 답함.");
   expect(result).not.toContain(q.answer[0]!.text);
-  expect(result).not.toContain("면접관 힌트·정정");
+  expect(result).not.toContain("답변에 필요한 면접관 보충");
   expect(q.answer[0]!.text).toContain("항상 같은 결과"); // Detailed source remains intact.
 });
 
@@ -101,4 +101,16 @@ it("renders transcript text as literal Markdown content instead of injecting hea
   expect(result).not.toContain("<script>");
   expect(result).not.toContain("\n# 새 제목");
   expect(result).toContain("\\*\\*확정\\*\\* &lt;img src=x&gt; \\[링크\\]");
+});
+
+it("removes administrative saved hints and boilerplate but preserves substantive candidate uncertainty", () => {
+  const q = exchange({ readingNotes: { topic: "경험·협업", question: "설명해 주세요.",
+    answer: ["캐시·검색을 분리함 — 재시도는 확실하지 않다고 답함. (일부 발화 불명확)"],
+    hint: "설명 기반으로 후속 질문 예정이라 안내" } });
+  const result = simpleInterviewMarkdown({ title: "Interview", exchanges: [q] });
+  expect(result).not.toContain("보충");
+  expect(result).not.toContain("발화 불명확");
+  expect(result).not.toMatch(/[·—]/u);
+  expect(result).toContain("재시도는 확실하지 않다고 답함");
+  expect(q.readingNotes!.answer[0]).toContain("(일부 발화 불명확)"); // Presentation never mutates saved evidence.
 });

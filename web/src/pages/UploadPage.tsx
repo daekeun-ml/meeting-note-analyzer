@@ -1,13 +1,14 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { CONSTRAINTS, type OutputLanguage } from "@meeting-notes/shared";
 import { useApi } from "../lib/api";
+import { FilePicker } from "../components/FilePicker";
 import { uploadMultipart } from "../lib/upload";
-import { IconFileAudio, IconGlobe, IconLanguage, IconUpload, IconVideo, IconUsers } from "../components/icons";
+import { IconFileAudio, IconGlobe, IconLanguage, IconVideo, IconUsers } from "../components/icons";
 import { LectureUploadForm } from "./LectureUploadPage";
 import { InterviewUploadForm } from "./InterviewUploadPage";
-import { Button, Card, InlineError, Page, ProgressBar, SectionLabel, Segmented } from "../components/ui";
+import { Button, InlineError, Page, ProgressBar, SectionLabel, Segmented } from "../components/ui";
 
 const OUTPUT_OPTIONS: { value: OutputLanguage; label: string }[] = [{ value: "ko", label: "한국어" }, { value: "en", label: "English" }, { value: "auto", label: "회의 언어 그대로" }];
 const HINT_OPTIONS = [{ value: "auto", label: "자동 감지" }, { value: "ko", label: "한국어" }, { value: "en", label: "English" }, { value: "ja", label: "日本語" }, { value: "zh", label: "中文" }];
@@ -36,7 +37,6 @@ function MeetingUploadForm() {
   const api = useApi();
   const nav = useNavigate();
   const qc = useQueryClient();
-  const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [lang, setLang] = useState<OutputLanguage>("ko");
@@ -73,25 +73,8 @@ function MeetingUploadForm() {
 
   return (
     <>
-      <input ref={input} type="file" accept="audio/mpeg,.mp3" className="hidden" onChange={(e) => pick(e.target.files?.[0] ?? null)} disabled={busy} />
-      {file ? (
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent"><IconFileAudio size={22} /></span>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold truncate">{file.name}</p>
-              <p className="text-[12px] text-ink-3">{(file.size / 1024 / 1024).toFixed(1)} MB, MP3</p>
-            </div>
-            {!busy && <Button variant="secondary" size="sm" onClick={() => input.current?.click()}>변경</Button>}
-          </div>
-        </Card>
-      ) : (
-        <button onClick={() => input.current?.click()} className="tap w-full rounded-2xl border-2 border-dashed border-line-2 bg-surface/60 px-4 py-9 flex flex-col items-center text-center active:bg-surface transition-colors">
-          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-accent-soft text-accent"><IconUpload size={26} /></span>
-          <p className="mt-4 font-semibold">mp3 파일 선택</p>
-          <p className="mt-1 text-[13px] text-ink-3">최대 500MB, 여러 언어가 섞인 회의도 됩니다</p>
-        </button>
-      )}
+      <FilePicker label="회의 녹음" accept="audio/mpeg,.mp3" file={file} disabled={busy} onFile={pick} onError={setError}
+        icon={<IconFileAudio className="text-accent" />} buttonLabel="mp3 파일 선택" hint="MP3 · 최대 500MB, 여러 언어가 섞인 회의도 됩니다" />
 
       <div className="mt-6">
         <SectionLabel>제목</SectionLabel>

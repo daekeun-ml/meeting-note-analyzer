@@ -75,7 +75,7 @@ it("shows the overall binary recommendation before competency opinions and links
 it("shows concise notes without review essays or speaker IDs and keeps full evidence expandable", async () => {
   expect(element.textContent).not.toContain("이력서의 관련 주장 · 면접 발언과 별도");
   expect(element.textContent).toContain("후보자 답변");
-  expect(element.textContent).toContain("면접관 힌트·정정");
+  expect(element.textContent).toContain("답변에 필요한 면접관 보충");
   expect(element.textContent).toContain("높은 신뢰도에 가중치를 더 준다고 답함.");
   expect(element.textContent).not.toContain("seg-0060");
   expect(element.textContent).not.toContain("S1");

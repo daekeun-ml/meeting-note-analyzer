@@ -45,11 +45,15 @@ The model checks sign conventions, derivatives, dimensions, and assumptions agai
 
 Existing documents stay readable. **학습 설명 업데이트** reruns a completed lecture with the current study prompt, reusing its transcription and compatible analysis caches. Prompt version changes invalidate both attached-slide and video-topic study caches. Model-policy or profile changes invalidate model-derived caches while retaining the prepared media and transcription. Model calls during regeneration may incur costs.
 
-Long descriptions render as separate paragraphs in the owner, guest, and PDF views. Existing escaped paragraph breaks and quotes are repaired for display. Inline and display formulas support both dollar and backslash delimiters; the renderer preserves LaTeX commands and code examples. A narrow repair also recognizes unmarked LaTeX equations immediately followed by Korean prose. New outputs are normalized before validation and saving, and damaged generated text containing replacement characters is sent back for correction. Missing source characters are not reconstructed by the renderer.
+Descriptions render Markdown headings, emphasis, lists, tables and code alongside LaTeX in owner, guest, and PDF views. Existing escaped paragraph breaks and quotes are repaired for display. Math supports dollar and backslash delimiters, plus common legacy notation such as `η_opt`, `v^t`, `t/T` and `1-α^t`. Code and URLs remain intact. New outputs are normalized and checked for recognizable unmarked or unclosed LaTeX before saving. Missing source characters are not reconstructed by the renderer.
+
+Long summaries and explanations have previous/next controls and a section selector. Pages split at Markdown block or list-item boundaries, preserving complete formulas, tables and code. Detailed study keeps the learning-group navigation visible, and math notes can be read one at a time. Guests select one learning group instead of scrolling through every group. PDF and Markdown downloads still include the complete document.
+
+All upload types support dragging one file onto the corresponding picker. The same file-type and size checks apply to clicking and dropping. Once a resumable upload plan exists, its file selections remain locked.
 
 ## Model selection
 
-Lecture analysis uses the configured Opus profile for reasoning and Sonnet for bounded extraction and selection:
+By default, lecture analysis uses the configured Opus profile for reasoning and Sonnet for bounded extraction and selection:
 
 | Model | Tasks |
 | --- | --- |
@@ -57,6 +61,10 @@ Lecture analysis uses the configured Opus profile for reasoning and Sonnet for b
 | Sonnet (`LECTURE_FAST_MODEL`) | Page-range extraction, slide readings, video-frame observations and visual matching, selection of papers from search results |
 
 The CDK runtime sets these from `opusModel` and `sonnetModel`. Both models share one per-attempt call budget, including retries, and one token counter. Concurrent calls retain their selected model through service retries and output repair; they do not switch models on failure. Interview analysis continues to use its explicit `INTERVIEW_MODEL`.
+
+**설정 → 강의 AI 설정** stores per-account defaults for model selection (the default mix, all Opus, or all Sonnet), structured versus narrative responses, tone, and detail. The authenticated preferences API stores them in the lecture table without starting analysis. A new lecture snapshots these defaults; explicit reanalysis snapshots the current defaults atomically with its processing claim. A lecture's custom request takes precedence over style defaults. It cannot override evidence checks, page scope, math formatting or the configured model allowlist.
+
+Changing preferences does not automatically rewrite published notes. Model/style settings are included in the analysis cache namespace, so reanalysis cannot reuse an incompatible result.
 
 The previous implementation sent every lecture task to Sonnet. Using Opus for synthesis is a quality-oriented configuration choice, not a measured accuracy claim. It can increase cost and processing time. The first reanalysis under the new policy regenerates model-derived results rather than reusing the old Sonnet summaries and alignments.
 

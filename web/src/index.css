@@ -76,6 +76,24 @@ input[type="range"].seek::-moz-range-thumb { width: 16px; height: 16px; border: 
 .skeleton { background: linear-gradient(90deg, var(--color-surface-2) 25%, var(--color-surface-3) 50%, var(--color-surface-2) 75%); background-size: 200% 100%; animation: shimmer 1.6s linear infinite; }
 
 .lecture-print { display: none; }
+.lecture-markdown > * + * { margin-top: .9rem; }
+.lecture-markdown p { white-space: pre-wrap; }
+.lecture-markdown h1, .lecture-markdown h2, .lecture-markdown h3, .lecture-markdown h4 { font-weight: 650; line-height: 1.5; margin-top: 1.25rem; }
+.lecture-markdown h1, .lecture-markdown h2 { font-size: 1.15em; }
+.lecture-markdown h3, .lecture-markdown h4 { font-size: 1.05em; }
+.lecture-markdown ul { list-style: disc; padding-left: 1.4rem; }
+.lecture-markdown ol { list-style: decimal; padding-left: 1.6rem; }
+.lecture-markdown li + li { margin-top: .55rem; }
+.lecture-markdown li > p + p, .lecture-markdown li > ul, .lecture-markdown li > ol { margin-top: .5rem; }
+.lecture-markdown strong { font-weight: 650; color: var(--color-ink); }
+.lecture-markdown blockquote { border-left: 3px solid var(--color-line-2); padding-left: .9rem; color: var(--color-ink-2); }
+.lecture-markdown pre { overflow-x: auto; padding: .8rem; border-radius: .6rem; background: var(--color-surface-2); white-space: pre; }
+.lecture-markdown code { font-size: .9em; }
+.lecture-markdown th, .lecture-markdown td { border: 1px solid var(--color-line); padding: .45rem .65rem; text-align: left; }
+.lecture-markdown .katex-display { overflow-x: auto; overflow-y: hidden; padding: .2rem 0; }
+.lecture-inline { white-space: pre-wrap; }
+.lecture-inline > * + * { margin-top: .5rem; }
+.lecture-markdown > :first-child { margin-top: 0; }
 @media print {
   @page { size: A4; margin: 16mm; }
   html, body { height: auto !important; overflow: visible !important; background: white !important; color: #111 !important; color-scheme: light; }

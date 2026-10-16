@@ -39,6 +39,9 @@
     "check:public": "python3 scripts/check-public.py",
     "test:deploy": "python3 -m unittest discover -s tests -p \"test_*.py\""
   },
+  "overrides": {
+    "katex": "^0.19.0"
+  },
   "devDependencies": {
     "typescript": "^5.9.2",
     "vitest": "^3.2.4",

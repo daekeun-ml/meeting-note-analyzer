@@ -135,7 +135,7 @@ function QuestionNotes({ exchange: q, seek, speakerLabels }: { exchange: Intervi
     <h2 className="mt-2 font-semibold text-[15px] leading-relaxed">{q.questionKind === "primary" ? "Q" : "f/u Q"}{q.interviewerId ? ` · ${speakerLabels[q.interviewerId] ?? "면접관"}` : ""}: <MathText text={notes.question} /></h2>
     <h3 className="mt-3 text-xs font-semibold text-ink-3">후보자 답변</h3>
     {notes.answer.length ? <ul className="mt-2 space-y-1 list-disc pl-4 text-sm leading-relaxed">{notes.answer.map((point, i) => <li key={i}><MathText text={point} /></li>)}</ul> : <p className="mt-2 text-sm text-ink-3">명확한 답변 없음.</p>}
-    {!!notes.hints.length && <div className="mt-3 text-xs text-ink-2"><strong>면접관 힌트·정정</strong><ul className="mt-1 list-disc pl-4 space-y-1">{notes.hints.map((hint, i) => <li key={i}><MathText text={hint} /></li>)}</ul></div>}
+    {!!notes.hints.length && <div className="mt-3 text-xs text-ink-2"><strong>답변에 필요한 면접관 보충</strong><ul className="mt-1 list-disc pl-4 space-y-1">{notes.hints.map((hint, i) => <li key={i}><MathText text={hint} /></li>)}</ul></div>}
     <details className="mt-3"><summary className="text-xs text-accent cursor-pointer">전체 답변·녹음 보기</summary>
       <p className="mt-3 text-sm font-semibold"><MathText text={q.question} /></p>
       <ul className="mt-2 space-y-2 list-disc pl-4 text-sm">{q.answer.map((point, i) => <li key={i}><MathText text={point.text} /></li>)}</ul>

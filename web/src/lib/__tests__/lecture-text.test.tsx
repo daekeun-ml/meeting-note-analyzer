@@ -4,6 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { LectureText, MathText } from "../../components/MathText";
 import { normalizeLectureText } from "../lecture-text";
+import { PagedLectureText } from "../../components/PagedLectureText";
+import { paginateLectureText } from "../lecture-pagination";
 
 let element: HTMLDivElement, root: Root;
 beforeEach(() => {
@@ -34,7 +36,7 @@ it("supports both math delimiters, keeps matrices intact, and does not split ins
 
 계산이 끝났습니다.`;
   await act(async () => root.render(<LectureText text={text} />));
-  expect(element.querySelectorAll("p")).toHaveLength(3);
+  expect(element.querySelectorAll("p")).toHaveLength(2); // Display math is a separate block, not a prose paragraph.
   expect(element.querySelectorAll(".katex")).toHaveLength(3);
   expect(element.querySelectorAll(".katex-display")).toHaveLength(1);
   expect(element.querySelector(".katex-error")).toBeNull();
@@ -45,8 +47,39 @@ it("preserves code and ambiguous English backslashes without executing generated
   const text = String.raw`코드: ` + "`print('\\n\\n')`, `$x$`, `\\\\theta`" +
     String.raw` 경로 C:\new\notes <img src=x onerror=alert(1)> $\href{javascript:alert(1)}{x}$`;
   await act(async () => root.render(<MathText text={text} />));
-  expect(element.textContent).toContain("`print('\\n\\n')`, `$x$`, `\\\\theta`");
+  expect([...element.querySelectorAll("code")].map((node) => node.textContent)).toEqual(["print('\\n\\n')", "$x$", "\\\\theta"]);
   expect(element.textContent).toContain(String.raw`C:\new\notes`);
   expect(element.querySelectorAll(".katex")).toHaveLength(1);
   expect(element.querySelector("img, script, a")).toBeNull();
+});
+
+it("renders the reported Markdown lists and unmarked learning-rate notation as math", async () => {
+  const text = `세 섹션은 **Learning Rates → Normalization → Generalization**입니다.
+
+**1) Learning Rates (p.16~21)**
+- 학습률 η가 작으면 느리고, η_opt는 곡률에 맞춰 정합니다.
+- 누적값 v^t와 진행도 t/T를 사용합니다.
+- 편향 보정의 분모는 1-α^t입니다.`;
+  await act(async () => root.render(<LectureText text={text} />));
+  expect(element.querySelectorAll("strong")).toHaveLength(2);
+  expect(element.querySelectorAll("ul > li")).toHaveLength(3);
+  expect(element.querySelectorAll(".katex")).toHaveLength(5);
+  expect(element.querySelector(".katex-error")).toBeNull();
+  expect(element.textContent).not.toContain("**");
+  expect(element.textContent).not.toContain("η_opt");
+  expect(normalizeLectureText("module_name, file_id, https://example.org/v_t")).toBe("module_name, file_id, https://example.org/v_t");
+});
+
+it("paginates at section/list boundaries and lets readers move without losing formulas", async () => {
+  const text = `**1) Learning Rates**\n\n- 학습률 $\\eta$를 정합니다.\n\n**2) Normalization**\n\n- 입력을 정규화합니다.\n\n**3) Generalization**\n\n- 과적합을 줄입니다.`;
+  const pages = paginateLectureText(text);
+  expect(pages).toHaveLength(3);
+  expect(pages.map((p) => p.text).join("\n")).toContain("$\\eta$");
+  await act(async () => root.render(<PagedLectureText text={text} label="강의 요약" />));
+  expect(element.textContent).toContain("학습률");
+  expect(element.querySelector(".lecture-markdown")?.textContent).not.toContain("입력을 정규화");
+  const next = [...element.querySelectorAll("button")].find((button) => button.textContent === "다음")!;
+  await act(async () => next.click());
+  expect(element.querySelector(".lecture-markdown")?.textContent).toContain("입력을 정규화");
+  expect(element.querySelector(".lecture-markdown")?.textContent).not.toContain("학습률");
 });

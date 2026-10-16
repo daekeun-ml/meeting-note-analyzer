@@ -20,6 +20,8 @@ The app uses the CloudFront URL created during deployment, with HTTPS provided b
 - **Chat:** ask questions about your meeting and lecture material with source references.
 - **Background processing:** once the upload finishes and processing starts, analysis continues on the server after the browser closes. Keep the upload page open until then. Web Push notifications are optional.
 
+File pickers accept drag-and-drop for meetings, lectures and interviews. Long lecture notes support Markdown, rendered formulas and section paging. **설정 → 강의 AI 설정** saves model, response format, tone and detail defaults for your account.
+
 The interface is in Korean. Meeting and lecture outputs can be requested in Korean, English, or the source language.
 
 Expired sessions are renewed in the background when a refresh token is available. Drafts and playback remain in place during renewal, and expired audio links can be reconnected without losing the playback position. Recordings with no recognized speech stop before the analysis stages and show a clear error.

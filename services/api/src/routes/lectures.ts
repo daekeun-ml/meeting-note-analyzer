@@ -5,6 +5,7 @@ import { SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
 import { abortMultipartUpload, claimLectureSlot, completeMultipartUpload, createMultipartUpload, ddb, deletePrefix, env, getLecture, lectureTable, presignDownload, releaseLectureSlot, requireEnv, s3 } from "@meeting-notes/backend";
 import { CONSTRAINTS, LECTURE_LIMITS, SLIDE_TYPES, lectureKeys, lectureUploadsComplete, toLectureDto, type CompleteLectureUpload, type CreateLectureResponse, type LectureRecord, type LectureResultLinks, createLectureSchema } from "@meeting-notes/shared";
 import type { z } from "zod";
+import type { LecturePreferences } from "@meeting-notes/shared";
 import { HttpError, type Caller } from "../lib/http.js";
 
 const sfn = new SFNClient({});
@@ -27,6 +28,7 @@ export async function createLecture(caller: Caller, input: z.output<typeof creat
     const rec: LectureRecord = { ...lectureKeys.record(id), SK: "META", GSI1PK: lectureKeys.user(caller.sub), GSI1SK: now,
       lectureId: id, owner: caller.sub, title: input.title, course: input.course, outputLanguage: input.outputLanguage, languageHint: input.languageHint,
       ...(input.customPrompt ? { customPrompt: input.customPrompt } : {}),
+      ...(input.preferences ? { preferences: input.preferences } : {}),
       ...(input.slideRange ? { slideRange: input.slideRange } : {}),
       status: "UPLOAD_PENDING", stages: {}, createdAt: now, updatedAt: now,
       assets: { [mediaKind]: { ...mediaInput, key: mediaKey, uploadId: media.uploadId, complete: false }, ...(slides && input.slides ? { slides: { ...input.slides, key: slidesKey, uploadId: slides.uploadId, complete: false } } : {}) },
@@ -67,7 +69,7 @@ export async function completeLectureUpload(caller: Caller, id: string, body: Co
 export function canRetryLecture(rec: Pick<LectureRecord, "status" | "researchFailures">) {
   return rec.status === "FAILED" || rec.status === "COMPLETED";
 }
-export async function startLecture(caller: Caller, id: string, retry = false) {
+export async function startLecture(caller: Caller, id: string, retry = false, preferences?: LecturePreferences) {
   const rec = await ownedLecture(caller, id);
   // A mobile client can lose the start response after the workflow has already advanced.
   if (["PREPARING", "TRANSCRIBING", "ANALYZING"].includes(rec.status) || (!retry && rec.status === "COMPLETED")) return { lectureId: id };
@@ -78,10 +80,10 @@ export async function startLecture(caller: Caller, id: string, retry = false) {
   const runId = pending || randomUUID();
   if (!pending) {
     const claim = { TableName: lectureTable(), Key: lectureKeys.record(id),
-      UpdateExpression: "SET #status = :queued, runId = :run, updatedAt = :now REMOVE #error, analysisClaim, prepareClaim",
+      UpdateExpression: `SET #status = :queued, runId = :run, updatedAt = :now${retry && preferences ? ", preferences = :preferences" : ""} REMOVE #error, analysisClaim, prepareClaim`,
       ConditionExpression: "#status = :old AND attribute_not_exists(deleting)",
       ExpressionAttributeNames: { "#status": "status", "#error": "error" },
-      ExpressionAttributeValues: { ":queued": "UPLOADED", ":old": rec.status, ":run": runId, ":now": new Date().toISOString() } };
+      ExpressionAttributeValues: { ":queued": "UPLOADED", ":old": rec.status, ":run": runId, ":now": new Date().toISOString(), ...(retry && preferences ? { ":preferences": preferences } : {}) } };
     // A finished lecture becoming active again takes a processing slot; an unstarted one still holds the slot claimed at creation.
     if (rec.status === "FAILED" || rec.status === "COMPLETED") await claimLectureSlot(caller.sub, LECTURE_LIMITS.maxActive, { Update: claim });
     else await ddb.send(new UpdateCommand(claim));

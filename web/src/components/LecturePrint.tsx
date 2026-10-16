@@ -28,7 +28,7 @@ export function LecturePrint({ document: doc }: { document: LectureDocument }) {
       {!!page.mathNotes?.length && <><h3>수식과 정리</h3><LectureMathNotes notes={page.mathNotes} /></>}
       {!!page.reviewQuestions.length && <><h3>복습 문제와 답</h3>{page.reviewQuestions.map((q, i) => <div key={i}><Text text={`${i + 1}. ${q.question}`} /><Text text={q.answer} /></div>)}</>}
       {!!page.flashcards.length && <><h3>복습 카드</h3>{page.flashcards.map((c, i) => <div key={i}><Text text={`Q. ${c.front}`} /><Text text={`A. ${c.back}`} /></div>)}</>}
-      {!!page.evidence.length && <><h3>발언 근거</h3>{page.evidence.map((e) => <Text key={e.segmentId} text={`[${hms(e.start)}–${hms(e.end)}] ${e.speaker}: ${e.text}`} />)}</>}
+      {!!page.evidence.length && <><h3>발언 근거</h3>{page.evidence.map((e) => <p key={e.segmentId} className="whitespace-pre-wrap">{`[${hms(e.start)}–${hms(e.end)}] ${e.speaker}: ${e.text}`}</p>)}</>}
       <h3>함께 읽을 논문</h3>
       {page.research.papers.map((p, i) => <div key={i}><p><strong>{p.title}</strong></p>{/^https?:\/\//i.test(p.url) && <p><a href={p.url}>{p.url}</a></p>}<Text text={p.relevance} /><Text text={`읽을 부분: ${p.readingFocus}`} /></div>)}
       {!page.research.papers.length && <p>{page.research.status === "failed" ? "논문 검색을 완료하지 못했습니다." : "참고 논문이 없습니다."}</p>}

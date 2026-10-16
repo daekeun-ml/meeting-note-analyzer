@@ -34,3 +34,27 @@ it("opens the lecture tab directly from the kind query parameter", async () => {
   expect(tab("강의 노트").getAttribute("aria-selected")).toBe("true");
   expect(element.querySelector('input[aria-label="강의 영상"]')).not.toBeNull();
 });
+
+it("validates dropped files and fills titles in meeting, lecture, and interview forms", async () => {
+  await render("/upload");
+  async function drop(label: string, name: string) {
+    const event = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: { files: [new File(["fixture"], name)], types: ["Files"], items: [] } });
+    await act(async () => element.querySelector(`[aria-label="${label} 파일 놓기"]`)!.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(true);
+  }
+  await drop("회의 녹음", "meeting.mp3");
+  expect(element.querySelector<HTMLInputElement>('input[placeholder^="예: 9월"]')?.value).toBe("meeting");
+  await drop("회의 녹음", "wrong.pdf");
+  expect(element.textContent).toContain("mp3 파일만");
+  await act(async () => tab("강의 노트").click());
+  await drop("강의 영상", "lecture.mp4");
+  expect(element.querySelector<HTMLInputElement>('input[aria-label="강의 제목"]')?.value).toBe("lecture");
+  await drop("강의 장표 (선택)", "slides.pdf");
+  expect(element.textContent).toContain("slides.pdf");
+  await act(async () => tab("인터뷰").click());
+  await drop("인터뷰 녹음", "interview.mp3");
+  await drop("후보자 이력서 (선택)", "resume.pdf");
+  expect(element.querySelector<HTMLInputElement>('input[aria-label="인터뷰 제목"]')?.value).toBe("interview");
+  expect(element.textContent).toContain("resume.pdf");
+});

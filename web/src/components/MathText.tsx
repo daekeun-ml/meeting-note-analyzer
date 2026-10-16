@@ -1,48 +1,58 @@
 import { useMemo } from "react";
 import katex from "katex";
+import Markdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import type { Root } from "mdast";
 import "katex/dist/katex.min.css";
-import { LECTURE_TOKEN_SOURCE, lectureParagraphs, normalizeLectureText } from "../lib/lecture-text";
+import { lectureMarkdown } from "../lib/lecture-text";
 
-type Part = { text: string; html?: undefined; display?: undefined } | { text?: undefined; html: string; display: boolean };
-// trust:false blocks \href, \url and \includegraphics; KaTeX escapes everything else, so its markup is safe to inject.
 const OPTIONS = { throwOnError: false, trust: false, strict: "ignore" as const, maxExpand: 1000, maxSize: 50 };
+const components: Components = {
+  img: ({ alt }) => <span>{alt}</span>,
+  a: ({ children, href }) => href ? <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent underline break-words">{children}</a> : <span>{children}</span>,
+  table: ({ children }) => <div className="overflow-x-auto"><table>{children}</table></div>,
+};
 
-/** A complete formula already isolated by a surrounding rich-text parser. */
+/** Keep legacy $$...$$ displays even when placed inside a paragraph. */
+function legacyDisplays() {
+  return (tree: Root, file: { value: unknown }) => {
+    const source = String(file.value);
+    type Node = { type: string; children?: Node[]; position?: { start: { offset?: number } }; data?: Record<string, unknown> };
+    function visit(node: Node) {
+      const offset = node.position?.start.offset ?? 0;
+      if (node.type === "inlineMath" && source.slice(offset, offset + 2) === "$$") {
+        node.data = { ...node.data, hProperties: { className: ["language-math", "math-display"] } };
+      }
+      for (const child of node.children ?? []) visit(child);
+    }
+    visit(tree as Node);
+  };
+}
+const plugins = [remarkGfm, remarkMath, legacyDisplays];
+
+/** Used by chat after its evidence-aware parser has isolated a formula. */
 export function MathFormula({ expression, display = false }: { expression: string; display?: boolean }) {
   const html = useMemo(() => katex.renderToString(expression.trim(), { ...OPTIONS, displayMode: display }), [expression, display]);
   return <span className={display ? "block overflow-x-auto py-1" : "inline-block max-w-full overflow-x-auto align-middle"} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-/** Lecture text, including legacy escaping and both dollar/backslash math delimiters. */
-export function MathText({ text, className }: { text: string; className?: string }) {
-  const parts = useMemo(() => split(text), [text]);
-  return <span className={`whitespace-pre-wrap ${className ?? ""}`}>{parts.map((part, i) => part.html === undefined ? part.text
-    : <span key={i} className={part.display ? "block overflow-x-auto py-1" : undefined} dangerouslySetInnerHTML={{ __html: part.html }} />)}</span>;
+/** Compact rich text for labels, bullets, and formula fields already in a container. */
+export function MathText({ text, className = "" }: { text: string; className?: string }) {
+  const source = useMemo(() => lectureMarkdown(text), [text]);
+  return <span className={`lecture-markdown lecture-inline ${className}`}>
+    <Markdown remarkPlugins={plugins} rehypePlugins={[[rehypeKatex, OPTIONS]]} components={{
+      ...components, p: ({ children }) => <span>{children}</span>,
+      pre: ({ children }) => <span className="block whitespace-pre-wrap font-mono">{children}</span>,
+    }}>{source}</Markdown>
+  </span>;
 }
 
-/** Real paragraphs for long lecture descriptions, also used by guest and print views. */
+/** Full Markdown and math, shared by owner, guest, and PDF views. */
 export function LectureText({ text, className = "" }: { text: string; className?: string }) {
-  const blocks = useMemo(() => lectureParagraphs(text), [text]);
-  return <div className={`space-y-3 leading-relaxed [overflow-wrap:anywhere] ${className}`}>
-    {blocks.map((block, i) => <p key={i}><MathText text={block} /></p>)}
+  const source = useMemo(() => lectureMarkdown(text), [text]);
+  return <div className={`lecture-markdown leading-relaxed [overflow-wrap:anywhere] ${className}`}>
+    <Markdown remarkPlugins={plugins} rehypePlugins={[[rehypeKatex, OPTIONS]]} components={components}>{source}</Markdown>
   </div>;
-}
-
-function split(text: string): Part[] {
-  text = normalizeLectureText(text);
-  const parts: Part[] = []; const pattern = new RegExp(LECTURE_TOKEN_SOURCE, "g"); let last = 0;
-  for (let match = pattern.exec(text); match; match = pattern.exec(text)) {
-    if (match.index > last) parts.push({ text: text.slice(last, match.index) });
-    const raw = match[0];
-    if (raw.startsWith("`")) {
-      parts.push({ text: raw });
-    } else {
-      const display = raw.startsWith("$$") || raw.startsWith("\\[");
-      const delimiter = display || raw.startsWith("\\") ? 2 : 1;
-      parts.push({ html: katex.renderToString(raw.slice(delimiter, -delimiter).trim(), { ...OPTIONS, displayMode: display }), display });
-    }
-    last = match.index + match[0].length;
-  }
-  if (last < text.length) parts.push({ text: text.slice(last) });
-  return parts;
 }

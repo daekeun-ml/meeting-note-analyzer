@@ -12,12 +12,21 @@ export function interviewSpeakerLabels(speakers: Pick<InterviewSpeaker, "id" | "
 
 export function readingInterviewNotes(exchange: InterviewExchange) {
   const brief = exchange.readingNotes;
+  const hints = brief ? (brief.hint ? [brief.hint] : []) : exchange.briefInterviewerContext ?? exchange.interviewerContext.map((point) => point.text);
   return {
-    topic: brief?.topic ?? exchange.topic,
-    question: brief?.question ?? exchange.question,
-    answer: brief?.answer ?? exchange.answer.map((point) => point.text),
-    hints: brief ? (brief.hint ? [brief.hint] : []) : exchange.briefInterviewerContext ?? briefInterviewerHints(exchange.interviewerContext),
+    topic: cleanReadingText(brief?.topic ?? exchange.topic),
+    question: cleanReadingText(brief?.question ?? exchange.question),
+    answer: (brief?.answer ?? exchange.answer.map((point) => point.text)).map(cleanReadingText).filter(Boolean),
+    hints: briefInterviewerHints(hints.map((text) => ({ text }))).slice(0, 1),
   };
+}
+
+export function cleanReadingText(text: string): string {
+  return text.split(/(```[\s\S]*?```|`[^`\n]*`|\$\$[\s\S]+?\$\$|\$[^$\n]+\$)/g).map((part, i) => i % 2 ? part : part
+    .replace(/[\[(]\s*(?:일부\s*)?(?:발화|녹음|전사|음성|인식)(?:\s*(?:내용|가|이))?\s*(?:불명확|불확실|판독 불가)\s*[\])]/gu, "")
+    .replace(/—/g, ", ")
+    .replace(/(?<=[가-힣A-Za-z]{2})[·∙](?=[가-힣A-Za-z](?:[가-힣A-Za-z]|-))/gu, ", ")
+    .replace(/[ \t]{2,}/g, " ")).join("").trim();
 }
 
 export function resumeComparisonText(comparison: NonNullable<InterviewDocument["resumeComparisons"]>[number]): string {
@@ -46,6 +55,7 @@ export function briefInterviewerHints(points: readonly { text: string }[]): stri
       .replace(/\s+/g, " ").trim();
     for (const sentence of relevant.split(/(?<=[.!?。])\s+/u)) {
       if (!sentence ||
+        /(?:후속|추가)\s*질문.*(?:예정|안내|예고)|(?:설명|답변).*기반.*질문.*(?:안내|예정)/u.test(sentence) ||
         /(?:면접|기술 질문).*(?:마무리|종료)|마무리 절차|직무 안내|피드백.*(?:입력|이틀)/u.test(sentence) ||
         /(?:추가|별도).*(?:힌트|정정|모범답안).*(?:기록되지|없었|없음|제시 없이)/u.test(sentence) ||
         /(?:후보자의 독립적 지식|후보자 지식의 근거|후보자 답변으로 (?:간주|볼 수)|요구한 답변 형식)/u.test(sentence) ||
@@ -58,7 +68,8 @@ export function briefInterviewerHints(points: readonly { text: string }[]): stri
         .replace(/^추가 단서\/맥락을 제공함:\s*/u, "추가 단서: ")
         .replace(/직접 설명을 제공함:\s*/u, "설명: ")
         .trim();
-      if (hint && !hints.includes(hint)) hints.push(hint);
+      const clean = cleanReadingText(hint);
+      if (clean && !hints.includes(clean)) hints.push(clean);
     }
   }
   return hints.slice(0, 3);
@@ -83,7 +94,7 @@ export function simpleInterviewMarkdown(document: Pick<InterviewDocument, "title
     }
     lines.push("");
     if (notes.hints.length) {
-      lines.push("**면접관 힌트·정정**", "", ...notes.hints.map((hint) => `- ${text(hint)}`), "");
+      lines.push("**답변에 필요한 면접관 보충**", "", ...notes.hints.map((hint) => `- ${text(hint)}`), "");
     }
   }
   return lines.join("\n").trimEnd() + "\n";

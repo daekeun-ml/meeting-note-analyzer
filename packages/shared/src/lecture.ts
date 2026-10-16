@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CONSTRAINTS, OUTPUT_LANGUAGES, type OutputLanguage } from "./constants.js";
 import type { UploadPartTarget } from "./meeting.js";
+import { lecturePreferencesSchema, type LecturePreferences } from "./lecture-preferences.js";
 
 export const LECTURE_LIMITS = { maxVideoBytes: 4 * 1024 ** 3, maxAudioBytes: CONSTRAINTS.maxUploadBytes, maxSlidesBytes: 100 * 1024 * 1024, maxPages: 120, maxVideoScenes: 240, maxResultPages: 360, maxActive: 3, uploadExpirySec: 4 * 3600, maxCustomPromptChars: 2000 } as const;
 export const SLIDE_TYPES = { pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation", pdf: "application/pdf" } as const;
@@ -37,6 +38,7 @@ export const createLectureSchema = z.object({
   course: z.string().trim().max(120).default(""),
   customPrompt: z.string().trim().max(LECTURE_LIMITS.maxCustomPromptChars, "추가 요청은 2,000자 이하로 입력하세요").default(""),
   slideRange: slideRangeSchema,
+  preferences: lecturePreferencesSchema.optional(),
   outputLanguage: z.enum(OUTPUT_LANGUAGES).default("ko"),
   languageHint: z.enum(["ko", "en", "ja", "zh", "auto"]).default("auto"),
   video: file.extend({ fileSize: z.number().int().positive().max(LECTURE_LIMITS.maxVideoBytes), contentType: z.literal("video/mp4") })
@@ -53,6 +55,7 @@ export interface LectureRecord {
   PK: string; SK: "META"; GSI1PK: string; GSI1SK: string;
   lectureId: string; owner: string; title: string; course: string;
   customPrompt?: string;
+  preferences?: LecturePreferences;
   slideRange?: string;
   selectedPages?: number[];
   originalPageCount?: number;
@@ -120,6 +123,7 @@ export interface LecturePage {
 export interface LectureDocument {
   version: 1; lectureId: string; title: string; course: string; generatedAt: string; outputLanguage: string;
   customPrompt?: string;
+  preferences?: LecturePreferences;
   slideRange?: string;
   grouped?: boolean;
   selectedPages?: number[];

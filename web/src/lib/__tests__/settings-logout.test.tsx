@@ -7,7 +7,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const auth = vi.hoisted(() => ({ user: { profile: { email: "user@example.test", sub: "u1", name: "User" } }, revokeTokens: vi.fn(), removeUser: vi.fn() }));
 const navigateTo = vi.hoisted(() => vi.fn());
 vi.mock("react-oidc-context", () => ({ useAuth: () => auth }));
-vi.mock("../api", () => ({ useApi: () => ({}) }));
+const preferences = vi.hoisted(() => ({ getLecturePreferences: vi.fn(), saveLecturePreferences: vi.fn() }));
+vi.mock("../api", () => ({ useApi: () => preferences }));
 vi.mock("../use-config", () => ({ useConfig: () => ({ cognitoDomain: "https://auth.example.test", cognitoClientId: "client-1" }) }));
 vi.mock("../push", () => ({ currentSubscription: async () => null, enablePush: vi.fn(), disablePush: vi.fn(), isIos: () => false, isStandalone: () => false, pushSupported: () => false }));
 vi.mock("../navigation", () => ({ navigateTo }));
@@ -16,6 +17,7 @@ import { SettingsPage } from "../../pages/SettingsPage";
 let root: Root; let element: HTMLDivElement;
 beforeEach(() => {
   vi.resetAllMocks();
+  preferences.getLecturePreferences.mockResolvedValue({ model: "balanced", format: "structured", tone: "plain", detail: "standard" });
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   auth.revokeTokens.mockResolvedValue(undefined); auth.removeUser.mockResolvedValue(undefined);
   element = document.createElement("div"); document.body.appendChild(element); root = createRoot(element);
@@ -39,4 +41,17 @@ it("still signs out locally when the revocation call fails", async () => {
   await act(async () => logoutButton().click());
   await vi.waitFor(() => expect(navigateTo).toHaveBeenCalledWith(logoutUrl));
   expect(auth.removeUser).toHaveBeenCalledTimes(1);
+});
+
+it("loads and saves account lecture defaults without starting any analysis", async () => {
+  await render();
+  for (const [label, value] of [["강의 분석 모델", "opus"], ["응답 형식", "narrative"], ["설명 문체", "friendly"], ["설명 상세도", "detailed"]]) {
+    const select = element.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!;
+    await act(async () => { select.value = value!; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  }
+  const expected = { model: "opus", format: "narrative", tone: "friendly", detail: "detailed" };
+  preferences.saveLecturePreferences.mockResolvedValue(expected);
+  await act(async () => [...element.querySelectorAll("button")].find((button) => button.textContent === "강의 설정 저장")!.click());
+  expect(preferences.saveLecturePreferences).toHaveBeenCalledWith(expected);
+  expect(element.textContent).toContain("강의 기본 설정을 저장했습니다.");
 });

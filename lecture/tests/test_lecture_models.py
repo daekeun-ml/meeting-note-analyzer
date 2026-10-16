@@ -99,3 +99,26 @@ def test_retry_and_output_repair_keep_the_route_and_share_the_call_budget(monkey
     assert client.ids == ["opus"] * 3
     assert "\n\n" in result.overview and r"$\arg\max_\theta \sum_t x_t$" in result.overview
     assert "\ufffd" not in result.overview
+
+
+@pytest.mark.parametrize("choice,expected", [("balanced", ["sonnet", "opus"]), ("opus", ["opus", "opus"]), ("sonnet", ["sonnet", "sonnet"])])
+def test_account_model_choice_controls_real_requests_and_never_accepts_arbitrary_profiles(choice, expected):
+    client = Client()
+    model = LectureModel(client=client, model_id="opus", fast_model_id="sonnet", preferences={"model": choice})
+    model.generate(Papers, "select papers", {})
+    model.generate(Overview, "overview", {})
+    assert [request["modelId"] for request in client.requests] == expected
+    with pytest.raises(ValueError):
+        LectureModel(client=client, preferences={"model": "unapproved-profile"})
+
+
+def test_style_defaults_reach_study_generation_and_invalidate_cached_outputs():
+    client = Client()
+    model = LectureModel(client=client, model_id="opus", fast_model_id="sonnet",
+                         preferences={"format": "narrative", "tone": "friendly", "detail": "detailed"})
+    model.generate(Overview, "overview", {"customPrompt": "이 강의는 짧게"})
+    request = client.requests[0]["messages"][0]["content"][0]["text"]
+    assert "connected short paragraphs" in request and "warmly" in request
+    assert "overrides these style defaults" in request and "LaTeX" in request
+    default = LectureModel(client=client, model_id="opus", fast_model_id="sonnet")
+    assert model.cache_namespace != default.cache_namespace
