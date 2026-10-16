@@ -4,8 +4,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { LectureText, MathText } from "../../components/MathText";
 import { normalizeLectureText } from "../lecture-text";
-import { PagedLectureText } from "../../components/PagedLectureText";
-import { paginateLectureText } from "../lecture-pagination";
 
 let element: HTMLDivElement, root: Root;
 beforeEach(() => {
@@ -68,18 +66,4 @@ it("renders the reported Markdown lists and unmarked learning-rate notation as m
   expect(element.textContent).not.toContain("**");
   expect(element.textContent).not.toContain("η_opt");
   expect(normalizeLectureText("module_name, file_id, https://example.org/v_t")).toBe("module_name, file_id, https://example.org/v_t");
-});
-
-it("paginates at section/list boundaries and lets readers move without losing formulas", async () => {
-  const text = `**1) Learning Rates**\n\n- 학습률 $\\eta$를 정합니다.\n\n**2) Normalization**\n\n- 입력을 정규화합니다.\n\n**3) Generalization**\n\n- 과적합을 줄입니다.`;
-  const pages = paginateLectureText(text);
-  expect(pages).toHaveLength(3);
-  expect(pages.map((p) => p.text).join("\n")).toContain("$\\eta$");
-  await act(async () => root.render(<PagedLectureText text={text} label="강의 요약" />));
-  expect(element.textContent).toContain("학습률");
-  expect(element.querySelector(".lecture-markdown")?.textContent).not.toContain("입력을 정규화");
-  const next = [...element.querySelectorAll("button")].find((button) => button.textContent === "다음")!;
-  await act(async () => next.click());
-  expect(element.querySelector(".lecture-markdown")?.textContent).toContain("입력을 정규화");
-  expect(element.querySelector(".lecture-markdown")?.textContent).not.toContain("학습률");
 });

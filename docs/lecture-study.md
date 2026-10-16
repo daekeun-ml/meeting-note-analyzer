@@ -47,7 +47,9 @@ Existing documents stay readable. **학습 설명 업데이트** reruns a comple
 
 Descriptions render Markdown headings, emphasis, lists, tables and code alongside LaTeX in owner, guest, and PDF views. Existing escaped paragraph breaks and quotes are repaired for display. Math supports dollar and backslash delimiters, plus common legacy notation such as `η_opt`, `v^t`, `t/T` and `1-α^t`. Code and URLs remain intact. New outputs are normalized and checked for recognizable unmarked or unclosed LaTeX before saving. Missing source characters are not reconstructed by the renderer.
 
-Long summaries and explanations have previous/next controls and a section selector. Pages split at Markdown block or list-item boundaries, preserving complete formulas, tables and code. Detailed study keeps the learning-group navigation visible, and math notes can be read one at a time. Guests select one learning group instead of scrolling through every group. PDF and Markdown downloads still include the complete document.
+The lecture, meeting, and interview collection lists show 10 records per page by default, with previous/next buttons, page numbers, and a 10/20/50-record selector. Moving forward fetches additional cursor batches as needed without appending every card to the screen. Returning from a detail page retains the list position and page size during the session. A failed fetch keeps the current page, and a final empty API batch does not create an empty display page.
+
+Lecture summaries, explanations, and math notes remain continuous within their existing study sections. Guest study sections can be expanded individually. PDF and Markdown downloads include the complete document.
 
 All upload types support dragging one file onto the corresponding picker. The same file-type and size checks apply to clicking and dropping. Once a resumable upload plan exists, its file selections remain locked.
 

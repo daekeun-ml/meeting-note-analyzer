@@ -112,6 +112,16 @@ it("renders legacy overview paragraphs and formulas in goals, review steps, and 
   await act(async () => window.dispatchEvent(new Event("afterprint")));
   print.mockRestore();
 });
+
+it("keeps note contents continuous while list pagination is handled on the collection page", async () => {
+  const result = fixture();
+  result.document!.overview = "**Learning Rates**\n\n학습률 $\\eta$를 설명합니다.\n\n**Normalization**\n\n입력의 스케일을 조정합니다.\n\n**Generalization**\n\n새 데이터에서 성능을 확인합니다.";
+  api.lectureResult.mockResolvedValue(result);
+  await act(async () => { client.setQueryData(["lecture", "test"], result); await new Promise((resolve) => setTimeout(resolve, 10)); });
+  for (const title of ["Learning Rates", "Normalization", "Generalization"]) expect(element.textContent).toContain(title);
+  expect(element.querySelector('[aria-label="강의 요약 페이지 선택"]')).toBeNull();
+  expect(element.querySelectorAll(".katex")).toHaveLength(1);
+});
 it("shows the request that was applied to the document as optional plain text", async () => {
   expect([...element.querySelectorAll("summary")].some((s) => s.textContent === "추가 요청")).toBe(false);
   const result = fixture();

@@ -1,4 +1,5 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { usePagedList } from "../lib/use-paged-list";
+import { ListPagination } from "../components/ListPagination";
 import { useNavigate } from "react-router";
 import { useApi } from "../lib/api";
 import { Button, Card, EmptyState, InlineError, Page, Skeleton, formatDate } from "../components/ui";
@@ -7,14 +8,13 @@ import { LectureStatus } from "../components/LectureStatus";
 
 export function LecturesPage() {
   const api = useApi(); const nav = useNavigate();
-  const query = useInfiniteQuery({ queryKey: ["lectures"], initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => api.listLectures(pageParam), getNextPageParam: (last) => last.cursor ?? undefined,
-    refetchInterval: (q) => q.state.data?.pages.some((p) => p.items.some((x) => ["UPLOADED", "PREPARING", "TRANSCRIBING", "ANALYZING"].includes(x.status))) ? 8000 : false });
-  const lectures = query.data?.pages.flatMap((p) => p.items) ?? [];
+  const pagination = usePagedList("lectures", api.listLectures, (lecture) => ["UPLOADED", "PREPARING", "TRANSCRIBING", "ANALYZING"].includes(lecture.status));
+  const { query, items: lectures, error } = pagination;
   return <Page title="강의 노트" subtitle="주제별 정리와 게스트 공유" action={<Button size="sm" icon={<IconPlus size={16} />} onClick={() => nav("/upload?kind=lecture")}>새 강의</Button>}>
     {query.isLoading && <Skeleton className="h-28" />}
-    {query.error && <InlineError>{query.error.message}</InlineError>}
-    {!query.isLoading && !query.error && !lectures.length && <EmptyState illustration={<IconStudy size={52} className="text-accent" />} title="배운 내용을 내 지식으로" description="MP4 영상이나 MP3 음성을 올리세요. 강의 내용을 분석해 복습 자료와 참고 논문을 정리합니다. PPTX/PDF도 선택하여 첨부할 수 있습니다." action={<Button onClick={() => nav("/upload?kind=lecture")}>첫 강의 정리하기</Button>} />}
+    {error && <InlineError>{error.message}</InlineError>}
+    {!query.isLoading && !error && !lectures.length && <EmptyState illustration={<IconStudy size={52} className="text-accent" />} title="배운 내용을 내 지식으로" description="MP4 영상이나 MP3 음성을 올리세요. 강의 내용을 분석해 복습 자료와 참고 논문을 정리합니다. PPTX/PDF도 선택하여 첨부할 수 있습니다." action={<Button onClick={() => nav("/upload?kind=lecture")}>첫 강의 정리하기</Button>} />}
+    {!!lectures.length && <ListPagination label="강의 목록" pagination={pagination} />}
     <div className="space-y-3">{lectures.map((lecture) => <Card key={lecture.lectureId}>
       <button type="button" className="tap block w-full rounded-t-2xl p-4 text-left active:bg-surface-2" onClick={() => nav(`/lectures/${lecture.lectureId}`)}>
         <div className="flex justify-between items-center gap-2"><span className="text-[12px] text-ink-3 truncate">{lecture.course || "강의"}</span><LectureStatus lecture={lecture} /></div>
@@ -25,6 +25,6 @@ export function LecturesPage() {
         <Button size="sm" variant="violet" onClick={() => nav(`/lectures/${lecture.lectureId}?share=1`)}>게스트 공유</Button>
       </div>}
     </Card>)}</div>
-    {query.hasNextPage && <Button full variant="secondary" className="mt-4" loading={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>더 보기</Button>}
+    {!!lectures.length && <ListPagination label="강의 목록" pagination={pagination} bottom />}
   </Page>;
 }

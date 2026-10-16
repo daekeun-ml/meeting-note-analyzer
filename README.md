@@ -20,7 +20,7 @@ The app uses the CloudFront URL created during deployment, with HTTPS provided b
 - **Chat:** ask questions about your meeting and lecture material with source references.
 - **Background processing:** once the upload finishes and processing starts, analysis continues on the server after the browser closes. Keep the upload page open until then. Web Push notifications are optional.
 
-File pickers accept drag-and-drop for meetings, lectures and interviews. Long lecture notes support Markdown, rendered formulas and section paging. **설정 → 강의 AI 설정** saves model, response format, tone and detail defaults for your account.
+File pickers accept drag-and-drop for meetings, lectures and interviews. Their collection lists show 10 records per page by default, with 20/50-record options. Lecture notes support Markdown and rendered formulas. **설정 → 강의 AI 설정** saves model, response format, tone and detail defaults for your account.
 
 The interface is in Korean. Meeting and lecture outputs can be requested in Korean, English, or the source language.
 

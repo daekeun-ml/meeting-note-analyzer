@@ -18,7 +18,7 @@ it("opens the selected completed lecture's sharing settings from the list", asyn
   ], cursor: null };
   api.listLectures.mockResolvedValue(data);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(["lectures"], { pages: [data], pageParams: [undefined] });
+  client.setQueryData(["lectures", "paged-list"], { pages: [data], pageParams: [undefined] });
   const element = document.createElement("div"); document.body.appendChild(element);
   const root = createRoot(element);
   try {

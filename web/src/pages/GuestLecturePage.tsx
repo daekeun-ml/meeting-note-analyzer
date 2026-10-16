@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatSlidePages, type GuestLectureResult } from "@meeting-notes/shared";
 import { Button, Card, InlineError, Page, Skeleton } from "../components/ui";
 import { LectureText, MathText } from "../components/MathText";
-import { PagedLectureText } from "../components/PagedLectureText";
 import { LectureMathNotes } from "../components/LectureMathNotes";
 import { LectureExportButton } from "../components/LecturePrint";
 import { useConfig } from "../lib/use-config";
@@ -13,8 +12,6 @@ class GuestError extends Error { constructor(readonly status: number, message: s
 export function GuestLecturePage() {
   const { shareId = "" } = useParams(); const cfg = useConfig();
   const qc = useQueryClient();
-  const [pageIndex, setPageIndex] = useState(0);
-  useEffect(() => setPageIndex(0), [shareId]);
   const [email, setEmail] = useState(""); const [code, setCode] = useState(""); const [challengeId, setChallengeId] = useState("");
   const [sent, setSent] = useState(false);
   const path = `/guest/lectures/${encodeURIComponent(shareId)}`;
@@ -63,23 +60,15 @@ export function GuestLecturePage() {
       <Button size="sm" variant="ghost" loading={logout.isPending} onClick={() => logout.mutate()}>열람 종료</Button></div>
     {document.selectedPages && <p className="mt-3 text-sm text-accent">원본 {formatSlidePages(document.selectedPages)}페이지 · 학습 묶음 {document.pages.length}개</p>}
     <LectureExportButton document={document} />
-    <Card className="mt-4 p-4"><h2 className="font-semibold mb-3">강의 정리</h2><PagedLectureText text={document.overview} label="강의 요약" className="text-sm" /></Card>
-    {!!document.pages.length && <nav aria-label="학습 항목 이동" className="sticky top-0 z-10 mt-4 rounded-xl bg-bg/95 p-2 backdrop-blur">
-      <p className="mb-2 text-xs text-ink-3">학습 항목 {Math.min(pageIndex, document.pages.length - 1) + 1} / {document.pages.length}</p>
-      <div className="flex gap-2"><Button size="sm" variant="secondary" disabled={pageIndex === 0} onClick={() => setPageIndex((i) => i - 1)}>이전 항목</Button>
-        <select aria-label="학습 항목 선택" className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-2 text-sm" value={Math.min(pageIndex, document.pages.length - 1)} onChange={(e) => setPageIndex(Number(e.target.value))}>
-          {document.pages.map((page, i) => <option key={page.page} value={i}>{page.sourcePages ? `${formatSlidePages(page.sourcePages)}페이지` : `${i + 1}`} {page.title}</option>)}
-        </select><Button size="sm" variant="secondary" disabled={pageIndex >= document.pages.length - 1} onClick={() => setPageIndex((i) => i + 1)}>다음 항목</Button>
-      </div>
-    </nav>}
-    <div className="space-y-4 mt-4">{document.pages.slice(Math.min(pageIndex, Math.max(0, document.pages.length - 1)), Math.min(pageIndex, Math.max(0, document.pages.length - 1)) + 1).map((page) => <details open key={page.page} className="rounded-2xl border border-line bg-surface p-4">
+    <Card className="mt-4 p-4"><h2 className="font-semibold mb-3">강의 정리</h2><LectureText text={document.overview} className="text-sm" /></Card>
+    <div className="space-y-4 mt-4">{document.pages.map((page) => <details key={page.page} className="rounded-2xl border border-line bg-surface p-4">
       <summary className="cursor-pointer font-semibold"><span className="block mb-1 text-xs text-accent">{page.sourcePages ? `${formatSlidePages(page.sourcePages)}페이지` : `학습 항목 ${page.page}`}</span>{page.title}</summary>
       <div className="mt-4 space-y-5">
         <div className="flex gap-3 overflow-x-auto">{images.filter((image) => image.page === page.page).map((image) => <figure key={image.url} className="min-w-[85%]">
           <img src={image.url} alt={image.sourcePage ? `원본 ${image.sourcePage}페이지` : page.title} loading="lazy" className="w-full rounded-lg bg-white" onError={() => void q.refetch()} />
           {image.sourcePage && <figcaption className="mt-1 text-xs text-ink-3">{image.sourcePage}페이지</figcaption>}</figure>)}</div>
-        {[["핵심 내용", page.slideSummary], ["수업에서 언급된 내용", page.spokenSummary], ["이해를 돕는 설명", page.explanation]].map(([title, text]) => text && <div key={title}><h3 className="font-semibold text-sm mb-2">{title}</h3><PagedLectureText text={text} label={title} className="text-sm" /></div>)}
-        {!!page.mathNotes?.length && <div><h3 className="font-semibold mb-3">수식과 정리</h3><LectureMathNotes notes={page.mathNotes} paginated /></div>}
+        {[["핵심 내용", page.slideSummary], ["수업에서 언급된 내용", page.spokenSummary], ["이해를 돕는 설명", page.explanation]].map(([title, text]) => text && <div key={title}><h3 className="font-semibold text-sm mb-2">{title}</h3><LectureText text={text} className="text-sm" /></div>)}
+        {!!page.mathNotes?.length && <div><h3 className="font-semibold mb-3">수식과 정리</h3><LectureMathNotes notes={page.mathNotes} /></div>}
         {!!page.reviewQuestions.length && <div><h3 className="font-semibold mb-3">복습 질문</h3>{page.reviewQuestions.map((item, i) => <details key={i} className="my-2 rounded-lg bg-surface-2 p-3 text-sm"><summary className="cursor-pointer"><MathText text={item.question} /></summary><p className="mt-3"><MathText text={item.answer} /></p></details>)}</div>}
         {!!page.research.papers.length && <div><h3 className="font-semibold mb-2">참고 논문</h3>{page.research.papers.map((paper) => <a key={paper.url} href={paper.url} target="_blank" rel="noreferrer" className="block my-2 text-sm text-accent">{paper.title}</a>)}</div>}
       </div>

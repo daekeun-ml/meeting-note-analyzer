@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { usePagedList } from "../lib/use-paged-list";
+import { ListPagination } from "../components/ListPagination";
 import { Link, useNavigate } from "react-router";
 import { ACTIVE_STATUSES, STAGES, type MeetingDto } from "@meeting-notes/shared";
 import { useApi } from "../lib/api";
@@ -11,16 +12,13 @@ import { STAGE_LABELS } from "../components/StageProgress";
 export function MeetingsPage() {
   const api = useApi();
   const nav = useNavigate();
-  const q = useQuery({
-    queryKey: ["meetings"],
-    queryFn: () => api.listMeetings(),
-    refetchInterval: (query) => (query.state.data?.items.some((m) => ACTIVE_STATUSES.includes(m.status)) ? 8_000 : false),
-  });
+  const pagination = usePagedList("meetings", api.listMeetings, (meeting) => ACTIVE_STATUSES.includes(meeting.status));
+  const { query: q, items, error } = pagination;
   return (
-    <Page title="회의" subtitle={q.data ? `${q.data.items.length}개의 회의` : undefined} action={<Button size="sm" icon={<IconPlus size={16} strokeWidth={2.25} />} onClick={() => nav("/upload")}>업로드</Button>}>
+    <Page title="회의" subtitle={q.data ? pagination.total !== undefined ? `${pagination.total}개의 회의` : "최근 회의부터 보기" : undefined} action={<Button size="sm" icon={<IconPlus size={16} strokeWidth={2.25} />} onClick={() => nav("/upload")}>업로드</Button>}>
       {q.isLoading && <div className="space-y-3"><Skeleton className="h-[92px]" /><Skeleton className="h-[92px]" /><Skeleton className="h-[92px]" /></div>}
-      {q.error && <InlineError>{String((q.error as Error).message)}</InlineError>}
-      {q.data && q.data.items.length === 0 && (
+      {error && <InlineError>{error.message}</InlineError>}
+      {q.data && !error && items.length === 0 && (
         <EmptyState
           illustration={<EmptyIllustration />}
           title="아직 회의가 없습니다"
@@ -28,13 +26,15 @@ export function MeetingsPage() {
           action={<Button icon={<IconPlus size={18} strokeWidth={2.25} />} onClick={() => nav("/upload")}>회의 업로드</Button>}
         />
       )}
+      {!!items.length && <ListPagination label="회의 목록" pagination={pagination} />}
       <ul className="space-y-3">
-        {q.data?.items.map((m) => (
+        {items.map((m) => (
           <li key={m.meetingId}>
             <MeetingRow m={m} />
           </li>
         ))}
       </ul>
+      {!!items.length && <ListPagination label="회의 목록" pagination={pagination} bottom />}
     </Page>
   );
 }
