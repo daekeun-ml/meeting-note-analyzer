@@ -12,7 +12,7 @@ const event = (routeKey: string, sub = "alice", body?: unknown) => ({
   routeKey, requestContext: { authorizer: { jwt: { claims: { sub } } } },
   pathParameters: { id: "11111111-1111-4111-8111-111111111111" },
   body: JSON.stringify(body),
-}) as Parameters<typeof handler>[0];
+}) as unknown as Parameters<typeof handler>[0];
 
 it("stores settings under the authenticated caller and rejects owner/model injection", async () => {
   expect(await handler(event("GET /api/lecture-preferences"))).toMatchObject({ statusCode: 200, body: JSON.stringify(DEFAULT_LECTURE_PREFERENCES) });
