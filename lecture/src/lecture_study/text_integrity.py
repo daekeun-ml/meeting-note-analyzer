@@ -10,6 +10,9 @@ Text integrity: [unreadable source text] marks lost characters in extracted text
 not proof that the slide image itself is unreadable. Use readable supplied text or visual evidence to
 identify the content; never guess from the damaged word alone. If the supplied evidence is insufficient,
 state the specific limitation in ordinary words and leave the missing content unresolved.
+Only the marked span is damaged; surrounding readable text remains evidence. A missing symbol in one
+expression does not make another term unreadable. If another supplied source clearly resolves a term,
+use it without inventing uncertainty about that resolved term or claiming all sources were damaged.
 Do not copy bracketed diagnostic markers or broken word fragments into the deliver output.
 Never echo a Unicode replacement glyph or an unpaired surrogate, including in quotations or examples
 of recognition errors; write "U+FFFD" when discussing the replacement code point itself.
@@ -63,7 +66,7 @@ def source_text_view(data):
         "unreadableFieldCount": len(paths),
         "fields": [field_path(path, "input") for path in paths[:30]],
         "marker": SOURCE_MARKER,
-        "instruction": "These are recognition/extraction gaps. Use readable supplied evidence or describe the uncertainty; do not guess missing text.",
+        "instruction": "Only the marked spans are recognition/extraction gaps; surrounding text is unchanged. Use readable supplied evidence to resolve them. Do not generalize one gap to unrelated text or guess missing content.",
     }}
 
 
