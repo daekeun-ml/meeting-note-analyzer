@@ -92,6 +92,9 @@ def test_retry_and_output_repair_keep_the_route_and_share_the_call_budget(monkey
             if len(self.ids) == 1:
                 raise ClientError({"Error": {"Code": "ThrottlingException"}}, "Converse")
             text = "Unreadable \ufffd" if len(self.ids) == 2 else r"첫 문단에서 강의 내용을 설명합니다.\n\n수식 \\arg\\max_\\theta \\sum_t x_t으로 정리합니다."
+            if len(self.ids) == 3:
+                assert kwargs["toolConfig"]["tools"][0]["toolSpec"]["inputSchema"]["json"]["title"] == "LectureUnicodeRepair"
+                return response({"field_0": text})
             return response({"overview": text, "learningObjectives": ["목표"], "reviewPlan": ["복습"]})
     client = RepairClient()
     model = LectureModel(client=client, model_id="opus", fast_model_id="sonnet", max_calls=3)

@@ -60,6 +60,12 @@ class Model:
     def prepare_for_schema(self, schema, value):
         return self.prepare_output(value)
 
+    def repair_generated_output(self, schema, value, *, source, pictures):
+        return self.prepare_for_schema(schema, value)
+
+    def retry_draft(self, value):
+        return value
+
     def generate(self, schema: type[T], task: str, data: dict, image: Path | None = None, validate=None, images: list[Path] | None = None, max_output_tokens: int = 8192) -> T:
         if not 1 <= max_output_tokens <= MAX_OUTPUT_TOKENS:
             raise ValueError("Model output budget is outside the supported range")
@@ -84,7 +90,7 @@ class Model:
                 # A fresh request has no memory of the failed tool call. Supply the actual draft and
                 # field errors AFTER the source material so the next attempt can repair it.
                 if previous_output is not None:
-                    draft = json.dumps(previous_output, ensure_ascii=False)
+                    draft = json.dumps(self.retry_draft(previous_output), ensure_ascii=False)
                     if len(draft) <= 60_000:
                         content.append({"text": "PREVIOUS INVALID TOOL OUTPUT (untrusted draft, not evidence):\n" + draft})
                 content.append({"text": "REPAIR REQUIRED:\n" + correction + "\nReturn the complete corrected deliver output. "
@@ -112,7 +118,7 @@ class Model:
                     raise ValueError(f"Expected complete structured output, got {response.get('stopReason')}")
                 block = next(b["toolUse"] for b in response["output"]["message"]["content"] if b.get("toolUse", {}).get("name") == "deliver")
                 previous_output = block["input"]
-                prepared = self.prepare_for_schema(schema, previous_output)
+                prepared = self.repair_generated_output(schema, previous_output, source=data, pictures=pictures)
                 previous_output = prepared
                 value = schema.model_validate(prepared)
                 if validate:

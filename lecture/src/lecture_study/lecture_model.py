@@ -9,6 +9,8 @@ from .schemas import Overview, Papers, SlideReading, Study, VideoMatch, VideoObs
 from .text import normalize_generated_text, validate_math_format
 from .preferences import LecturePreferences, preferences_prompt
 from .study_length import repair_study_length
+from .text_integrity import DRAFT_MARKER, INTEGRITY_RULES, mark_unreadable, source_text_view, validate_text_integrity
+from .unicode_repair import repair_generated_unicode
 
 ROUTING_VERSION = "opus-led-v2-markdown"
 FAST_SCHEMAS = frozenset({DeckScope, SlideReading, VideoObservation, VideoMatch, Papers})
@@ -30,7 +32,7 @@ not what occurred in the recording. State missing or uncertain evidence precisel
 
 class LectureModel(Model):
     def __init__(self, check=lambda: None, client=None, *, model_id=None, fast_model_id=None, max_calls=None, preferences=None):
-        super().__init__(check, client, system=SYSTEM + FORMATTING, model_id=model_id, max_calls=max_calls)
+        super().__init__(check, client, system=SYSTEM + FORMATTING + INTEGRITY_RULES, model_id=model_id, max_calls=max_calls)
         self.fast_model_id = fast_model_id or os.environ.get("LECTURE_FAST_MODEL", "global.anthropic.claude-sonnet-5")
         self.preferences = LecturePreferences.model_validate(preferences or {})
         if self.preferences.model == "opus":
@@ -46,13 +48,10 @@ class LectureModel(Model):
     def generate(self, schema, task, data, *args, **kwargs):
         if schema in (Study, Overview):
             task += preferences_prompt(self.preferences)
-        return super().generate(schema, task, data, *args, **kwargs)
+        return super().generate(schema, task, source_text_view(data), *args, **kwargs)
 
     def prepare_output(self, value):
-        # Replacement characters indicate damaged generated text, not an invitation
-        # to invent missing source words. Ask for a clean, source-grounded draft.
-        if "\ufffd" in json.dumps(value, ensure_ascii=False):
-            raise ValueError("Generated text contains a replacement character. Rephrase using readable source evidence; do not guess illegible source text.")
+        validate_text_integrity(value)
         normalized = normalize_generated_text(value)
         validate_math_format(normalized)
         return normalized
@@ -62,6 +61,16 @@ class LectureModel(Model):
         # Length repair uses the same Opus/Sonnet choice, liveness checks and call
         # budget. Revalidate the complete Study and its references in Model.generate.
         return repair_study_length(self, normalized) if schema is Study else normalized
+
+    def repair_generated_output(self, schema, value, *, source, pictures):
+        repaired = repair_generated_unicode(self, schema, value, source, pictures)
+        return self.prepare_for_schema(schema, repaired)
+
+    def retry_draft(self, value):
+        try:
+            return mark_unreadable(value, DRAFT_MARKER)
+        except ValueError:
+            return {"repairRequired": "The draft contained unreadable structured keys. Regenerate the schema from the original input evidence."}
 
 
 class AnalysisCache:
