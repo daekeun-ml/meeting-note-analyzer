@@ -10,10 +10,21 @@ export const DEFAULT_AUDIO_PROCESSING: AudioProcessingOptions = { denoise: true,
 
 const mediaSchema = z.object({ key: z.string().max(1024), startSec: z.number().finite().nonnegative(), endSec: z.number().finite().positive() })
   .refine((value) => value.endSec > value.startSec, "Invalid processed media interval");
+const noiseReportSchema = z.object({
+  status: z.enum(["applied", "disabled", "failed", "skipped"]),
+  method: z.literal("fft"), reductionDb: z.number().finite().nonnegative().max(12),
+  noiseFloorDb: z.number().finite().min(-80).max(-20).optional(),
+  algorithm: z.literal("wiener-v1").optional(),
+  reason: z.enum(["insufficient_noise_profile", "limited_reduction"]).optional(),
+  profileFrames: z.number().int().positive().max(1024).optional(),
+  sampleReductionDb: z.number().finite().min(0).max(60).optional(),
+});
 export const audioProcessingReportSchema = z.object({
   version: z.literal(1),
   kind: z.enum(["meeting", "lecture", "interview"]),
-  noise: z.object({ status: z.enum(["applied", "disabled", "failed"]), method: z.literal("fft"), reductionDb: z.number().nonnegative().max(12), noiseFloorDb: z.number().min(-80).max(-20).optional() }),
+  noise: noiseReportSchema,
+  // A derivative can be regenerated without changing the STT input or transcript.
+  mediaNoise: noiseReportSchema.optional(),
   scope: z.object({
     status: z.enum(["applied", "unchanged", "disabled", "review_required", "unavailable"]),
     startSec: z.number().finite().nonnegative(), endSec: z.number().finite().positive(),

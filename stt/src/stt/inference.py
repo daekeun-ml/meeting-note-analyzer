@@ -12,7 +12,8 @@ from typing import Protocol
 import boto3
 
 from .align import Turn, assign_speakers, build_segments, relabel_speakers, speaker_stats
-from .audio import denoise_wav, estimate_noise_floor, mp3_export_bitrate, probe_duration, to_wav16k
+from .audio import mp3_export_bitrate, probe_duration, to_wav16k
+from .noise_reduction import reduce_noise
 from .processing import process_transcript
 from .schemas import SttRequest, SttResponse, Word
 
@@ -56,9 +57,7 @@ class Engine:
             noise = {"status": "disabled", "method": "fft", "reductionDb": 0}
             if req.processing.denoise:
                 try:
-                    floor = estimate_noise_floor(wav)
-                    wav = denoise_wav(wav, Path(tmp) / "denoised.wav", floor)
-                    noise = {"status": "applied", "method": "fft", "reductionDb": 6, "noiseFloorDb": round(floor, 2)}
+                    wav, noise = reduce_noise(wav, Path(tmp) / "denoised.wav")
                 except Exception as error:
                     log.warning("Noise reduction failed; retaining normalized input: %s", type(error).__name__)
                     noise = {"status": "failed", "method": "fft", "reductionDb": 0}

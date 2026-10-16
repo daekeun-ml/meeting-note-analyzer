@@ -55,3 +55,26 @@ it("exports processed spellings with original wording and original recording tim
   expect(result.content).toContain("교정 전: 에스쓰리를 사용합니다");
   expect(result.content).toContain("모든 시간은 원본 녹음 기준");
 });
+
+it("reports a skipped or ineffective legacy filter without claiming noise was removed", async () => {
+  const processing = report();
+  processing.noise = { status: "skipped", method: "fft", algorithm: "wiener-v1", reductionDb: 0, reason: "insufficient_noise_profile" };
+  await act(async () => root.render(<ProcessedMedia result={{ processing }} refresh={async () => undefined} />));
+  expect(element.textContent).toContain("잡음 추정 불충분");
+  expect(element.textContent).not.toContain("잡음 감소 적용");
+  processing.noise = { status: "applied", method: "fft", reductionDb: 6, noiseFloorDb: -80 };
+  await act(async () => root.render(<ProcessedMedia result={{ processing }} refresh={async () => undefined} />));
+  expect(element.textContent).toContain("제거 효과 제한");
+});
+
+it("separates regenerated download audio from the original transcription preprocessing", async () => {
+  const processing = report();
+  processing.noise = { status: "applied", method: "fft", reductionDb: 6, noiseFloorDb: -80 };
+  processing.mediaNoise = { status: "applied", method: "fft", algorithm: "wiener-v1", reductionDb: 10, sampleReductionDb: 4.5 };
+  const validated = audioProcessingReportSchema.parse(processing);
+  expect(validated.noise.noiseFloorDb).toBe(-80);
+  await act(async () => root.render(<ProcessedMedia result={{ processing: validated }} refresh={async () => undefined} />));
+  expect(element.textContent).toContain("잡음 감소 적용");
+  expect(element.textContent).toContain("약 4.5 dB");
+  expect(element.textContent).toContain("기존 전사와 분석 결과는 유지");
+});
