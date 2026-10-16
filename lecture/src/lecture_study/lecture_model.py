@@ -12,6 +12,7 @@ from .study_length import repair_study_length
 from .text_integrity import DRAFT_MARKER, INTEGRITY_RULES, mark_unreadable, source_text_view, validate_text_integrity
 from .unicode_repair import repair_generated_unicode
 from .math_repair import repair_generated_math
+from .overview_repair import OVERVIEW_RULES, normalize_overview_lists, repair_overview
 
 ROUTING_VERSION = "opus-led-v2-markdown"
 FAST_SCHEMAS = frozenset({DeckScope, SlideReading, VideoObservation, VideoMatch, Papers})
@@ -49,6 +50,8 @@ class LectureModel(Model):
     def generate(self, schema, task, data, *args, **kwargs):
         if schema in (Study, Overview):
             task += preferences_prompt(self.preferences)
+        if schema is Overview:
+            task += OVERVIEW_RULES
         return super().generate(schema, task, source_text_view(data), *args, **kwargs)
 
     def prepare_output(self, value):
@@ -64,10 +67,13 @@ class LectureModel(Model):
         return repair_study_length(self, normalized) if schema is Study else normalized
 
     def repair_generated_output(self, schema, value, *, source, pictures):
+        if schema is Overview:
+            value = normalize_overview_lists(value)
         repaired = repair_generated_unicode(self, schema, value, source, pictures)
         validate_text_integrity(repaired)
         formatted = repair_generated_math(normalize_generated_text(repaired))
-        return self.prepare_for_schema(schema, formatted)
+        prepared = self.prepare_for_schema(schema, formatted)
+        return repair_overview(self, prepared, source=source) if schema is Overview else prepared
 
     def retry_draft(self, value):
         try:

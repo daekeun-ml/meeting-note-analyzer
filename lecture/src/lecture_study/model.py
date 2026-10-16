@@ -131,6 +131,8 @@ class Model:
                     details = []
                     for error in errors:
                         message = error["msg"]
+                        if error["type"] == "list_type":
+                            message += ". Return a real JSON array matching the item schema, not a string or object."
                         if error["type"] == "string_too_long":
                             field = prepared
                             for key in error["loc"]:

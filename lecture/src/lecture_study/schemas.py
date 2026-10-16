@@ -153,6 +153,9 @@ class Papers(Strict):
 
 
 class Overview(Strict):
-    overview: str = Field(min_length=20, max_length=5000)
-    learningObjectives: list[str] = Field(min_length=1, max_length=15)
-    reviewPlan: list[str] = Field(min_length=1, max_length=15)
+    overview: str = Field(min_length=20, max_length=5000,
+                          description="Whole-lecture synthesis by main themes. Aim for 2000–3000 Unicode characters, hard maximum 5000 including Markdown and LaTeX. Do not retell every section.")
+    learningObjectives: list[str] = Field(min_length=1, max_length=15,
+                                          description="A JSON array of concise learning outcomes, usually 3–7 strings. Not a JSON-encoded string or Markdown block.")
+    reviewPlan: list[str] = Field(min_length=1, max_length=15,
+                                  description="A JSON array of practical review steps in order, usually 3–7 strings. Not a JSON-encoded string or Markdown block.")
