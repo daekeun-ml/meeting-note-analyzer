@@ -17,6 +17,10 @@ export function transcriptToMarkdown(t: Transcript, title: string): string {
     "",
   ];
   const pendingNames = t.speakers.filter((s) => s.reviewRequired && !s.nameConfirmedByUser);
+  if (t.processing) {
+    lines.push(`- analysis interval on original recording: ${hms(t.processing.scope.startSec)}–${hms(t.processing.scope.endSec)}`,
+      `- technical spelling corrections: ${t.processing.terms.applied}; original speech is preserved separately`, "");
+  }
   if (pendingNames.length) lines.push(...pendingNames.map((s) => `- ${s.id}: [speaker name review required]${s.proposedLabel ? ` candidate: ${s.proposedLabel}` : ""}`), "");
   for (const seg of t.segments) {
     const label = seg.speakerLabel && seg.speakerLabel !== seg.speaker ? `${seg.speaker} (${seg.speakerLabel})` : seg.speaker;

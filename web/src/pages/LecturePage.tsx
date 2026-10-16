@@ -1,3 +1,4 @@
+import { ProcessedMedia } from "../components/ProcessedMedia";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -71,6 +72,7 @@ export function LecturePage() {
       </Button>}
       <LectureExportButton key={document.generatedAt} document={document} compact />
     </div>}
+    <ProcessedMedia result={query.data} refresh={async () => (await query.refetch({ throwOnError: true })).data} />
     {document && <LectureSharing key={id} lectureId={id} open={sharingOpen} onClose={() => showSharing(false)} />}
     {customPrompt && <details className="mt-3 text-sm"><summary className="cursor-pointer text-ink-3">추가 요청</summary><p className="mt-2 whitespace-pre-wrap leading-relaxed">{customPrompt}</p></details>}
     {document?.selectedPages && <Card className="mt-3 p-4"><p className="text-sm font-semibold">분석 범위: {formatSlidePages(document.selectedPages)}페이지</p>
@@ -109,7 +111,7 @@ export function LecturePage() {
       </div>}
       {tab === "cards" && <div className="mt-5 space-y-3"><p className="text-sm text-ink-3">먼저 답을 떠올린 뒤 카드를 펼쳐 확인하세요.</p>{document.pages.flatMap((p) => p.flashcards.map((card, i) => <details key={`${p.page}-${i}`} className="rounded-2xl bg-surface border border-line p-4"><summary className="cursor-pointer text-[15px] font-medium"><span className="block text-[11px] text-accent mb-2">{p.sourcePages ? `${formatSlidePages(p.sourcePages)}페이지` : `${p.page}장`} · {p.title}</span><MathText text={card.front} /></summary><p className="mt-4 border-t border-line pt-4 text-sm leading-relaxed whitespace-pre-wrap"><MathText text={card.back} /></p></details>))}</div>}
     </>}
-    {transcriptUrl && (tab === "transcript" || !document) && <div className="mt-4"><Transcript title={lecture.title} transcriptUrl={transcriptUrl} audioUrl={videoUrl ? null : audioUrl} speakerLabels={{}} onSeek={videoUrl ? (time) => player.current?.seek(time) : undefined} onRefreshUrls={async () => (await query.refetch({ throwOnError: true })).data} /></div>}
+    {transcriptUrl && (tab === "transcript" || !document) && <div className="mt-4"><Transcript title={lecture.title} transcriptUrl={transcriptUrl} originalTranscriptUrl={query.data.originalTranscriptUrl} audioUrl={videoUrl ? null : audioUrl} speakerLabels={{}} onSeek={videoUrl ? (time) => player.current?.seek(time) : undefined} onRefreshUrls={async () => (await query.refetch({ throwOnError: true })).data} /></div>}
     {!active && <Button full variant="danger" className="mt-10" loading={remove.isPending} icon={<IconTrash size={16} />} onClick={() => { if (confirm("이 강의의 영상·음성, 첨부 파일, 학습 자료를 모두 삭제할까요?")) remove.mutate(); }}>강의 삭제</Button>}
   </Page>;
 }

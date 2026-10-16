@@ -1,3 +1,5 @@
+import { DEFAULT_AUDIO_PROCESSING } from "@meeting-notes/shared";
+import { AudioProcessingSettings } from "../components/AudioProcessingSettings";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -12,6 +14,7 @@ import { IconVideo, IconStudy, IconFileAudio } from "../components/icons";
 export function LectureUploadForm() {
   const api = useApi(); const nav = useNavigate(); const qc = useQueryClient();
   const [title, setTitle] = useState(""); const [course, setCourse] = useState("");
+  const [audioProcessing, setAudioProcessing] = useState(DEFAULT_AUDIO_PROCESSING);
   const [customPrompt, setCustomPrompt] = useState("");
   const [slideRange, setSlideRange] = useState("");
   const [mediaKind, setMediaKind] = useState<"video" | "audio">("video");
@@ -28,7 +31,7 @@ export function LectureUploadForm() {
     if (!media || badSlides) return;
     setError(""); setBusy(true);
     try {
-      const parsed = createLectureSchema.safeParse({ title, course, customPrompt, slideRange: slides ? slideRange : "", outputLanguage: language, languageHint: hint,
+      const parsed = createLectureSchema.safeParse({ title, course, customPrompt, audioProcessing, slideRange: slides ? slideRange : "", outputLanguage: language, languageHint: hint,
         [mediaKind]: { fileName: media.name, fileSize: media.size, contentType: isVideo ? "video/mp4" : "audio/mpeg" },
         slides: slides ? { fileName: slides.name, fileSize: slides.size, contentType: /\.pdf$/i.test(slides.name) ? SLIDE_TYPES.pdf : SLIDE_TYPES.pptx } : undefined });
       if (!parsed.success) throw new Error(parsed.error.issues.map((x) => x.message).join(", "));
@@ -74,6 +77,7 @@ export function LectureUploadForm() {
         <p className="text-xs text-ink-3 leading-relaxed mt-3">첨부하면 선택한 장표와 발언을 연결해 설명합니다. 장표 없이 녹음이나 영상만 올려도 분석할 수 있습니다.</p>
         {(slides || badSlides) && <Button variant="ghost" size="sm" className="mt-2" onClick={() => chooseSlides(null)}>첨부 취소</Button>}
       </div>
+      <AudioProcessingSettings value={audioProcessing} onChange={setAudioProcessing} disabled={busy || !!plan} />
       <label className="block"><SectionLabel>강의 제목</SectionLabel><input aria-label="강의 제목" maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 머신러닝 3주차 — 최적화" className={inputClass} /></label>
       <label className="block"><SectionLabel>과목명 (선택)</SectionLabel><input aria-label="과목명" maxLength={120} value={course} onChange={(e) => setCourse(e.target.value)} placeholder="예: 고급 머신러닝" className={inputClass} /></label>
       {slides && <label className="block"><SectionLabel>분석할 페이지 (선택)</SectionLabel>

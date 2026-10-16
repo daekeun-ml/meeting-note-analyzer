@@ -2,6 +2,7 @@ export * from "./constants.js";
 export * from "./keys.js";
 export * from "./meeting.js";
 export * from "./stt.js";
+export * from "./audio-processing.js";
 export * from "./stages.js";
 export * from "./brief.js";
 export * from "./upload.js";

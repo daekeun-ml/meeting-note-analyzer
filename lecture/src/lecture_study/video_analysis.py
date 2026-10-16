@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageOps
 
-from .outline import build_outline, topic_pages
+from .outline import build_outline, recording_scope, topic_pages
 from .parallel import parallel_map
 from .prompts import STUDY_CACHE_VERSION, VIDEO_STUDY_TASK
 from .schemas import SlideReading, Study, VideoMatch, VideoObservation
@@ -103,6 +103,19 @@ def analyze_video(store, workdir, check, model, search, render):
     if not manifest or not transcript:
         raise ValueError("Prepared video or transcript is missing")
     scenes = manifest["scenes"]
+    scope_start, scope_end = recording_scope(transcript)
+    if scope_start or scope_end < manifest["durationSec"]:
+        scoped = []
+        for scene in scenes:
+            start, end = max(scope_start, scene["startSec"]), min(scope_end, scene["endSec"])
+            if start >= end:
+                continue
+            indices = [i for i, at in enumerate(scene["frameTimes"]) if start <= at <= end]
+            if not indices:
+                indices = [min(range(len(scene["frameTimes"])), key=lambda i: abs(scene["frameTimes"][i] - (start + end) / 2))]
+            scoped.append({**scene, "startSec": start, "endSec": end,
+                           "frameTimes": [scene["frameTimes"][i] for i in indices], "imageKeys": [scene["imageKeys"][i] for i in indices]})
+        scenes = scoped
     language = record["outputLanguage"] if record["outputLanguage"] != "auto" else transcript.get("language") or "ko"
     deck, readings = [], []
     if record["assets"].get("slides"):
@@ -148,7 +161,7 @@ def analyze_video(store, workdir, check, model, search, render):
     unassigned = {i for i in range(len(scenes)) if i not in assigned}
     if unassigned:
         # Video sections become topic pages of a few minutes each, cut along the speech rather than at every screen change.
-        outline = build_outline(store, model, language, transcript["segments"], scenes, observations, manifest["durationSec"])
+        outline = build_outline(store, model, language, transcript["segments"], scenes, observations, manifest["durationSec"], start_sec=scope_start, end_sec=scope_end)
         entries += [{"deckIndex": None, "sceneIndices": topic["sceneIndices"], "topic": topic} for topic in topic_pages(outline, scenes, unassigned)]
 
     def build_page(item):

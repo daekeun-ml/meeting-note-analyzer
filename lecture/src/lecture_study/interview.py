@@ -26,6 +26,9 @@ When explicitly asked for the overall Summary, you may draft an advisory Incline
 for the human interviewer to review. No recommendation changes an applicant's status or triggers a hiring action.
 Do not use other interviews, memory, external searches or the user's example feedback as evidence.
 Candidate descriptions of their work are self-reports, not independently verified achievements.
+Technical term spellings may be dictionary-normalized; originalText preserves the recognized wording when changed.
+A spelling correction is not evidence that the candidate understood a concept or gave a different factual answer.
+All segment IDs and timestamps refer to the original recording, even when clearly unrelated head/tail chatter was excluded.
 Produce only the requested structured deliver output."""
 
 ROSTER_TASK = """Identify speaker roles from the provided speech examples: candidate, interviewer, or unknown.
@@ -339,7 +342,8 @@ def analyze_interview(store, check, model=None):
     transcript = store.read(record["transcriptKey"])
     if not transcript or not transcript.get("segments"):
         raise ValueError("인터뷰 전사를 찾지 못했습니다.")
-    segments = [{key: s[key] for key in ("id", "start", "end", "speaker", "text")} for s in transcript["segments"]]
+    segments = [{**{key: s[key] for key in ("id", "start", "end", "speaker", "text")},
+                 **({"originalText": s["originalText"]} if s.get("originalText") else {})} for s in transcript["segments"]]
     batches = transcript_batches(segments, budget=28_000)
     by_id = {s["id"]: s for s in segments}
     positions = {s["id"]: i for i, s in enumerate(segments)}

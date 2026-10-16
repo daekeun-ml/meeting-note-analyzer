@@ -31,10 +31,23 @@ def transcript_windows(duration: float, window_sec: int = WINDOW_SEC) -> list[tu
     return list(zip(bounds, bounds[1:]))
 
 
-def build_outline(store, model, language: str, segments: list[dict], scenes: list[dict], observations: list[dict], duration: float) -> dict:
+def recording_scope(transcript):
+    duration = float(transcript["durationSec"])
+    scope = (transcript.get("processing") or {}).get("scope") or {}
+    if scope.get("status") == "applied":
+        start, end = float(scope["startSec"]), float(scope["endSec"])
+        if 0 <= start < end <= duration:
+            return start, end
+    return 0.0, duration
+
+
+def build_outline(store, model, language: str, segments: list[dict], scenes: list[dict], observations: list[dict], duration: float,
+                  *, start_sec=0, end_sec=None) -> dict:
+    end_sec = duration if end_sec is None else end_sec
     def build():
         chapters = []
-        for start, end in transcript_windows(duration):
+        for relative_start, relative_end in transcript_windows(end_sec - start_sec):
+            start, end = relative_start + start_sec, min(end_sec, relative_end + start_sec)
             speech = [{"start": round(s["start"], 1), "end": round(s["end"], 1), "text": s["text"][:400]} for s in segments if s["end"] > start and s["start"] < end]
             visual = [{"startSec": scene["startSec"], "endSec": scene["endSec"], "title": observation["title"], "visualType": observation["visualType"]}
                       for scene, observation in zip(scenes, observations) if scene["endSec"] > start and scene["startSec"] < end]

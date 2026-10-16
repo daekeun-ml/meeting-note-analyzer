@@ -1,5 +1,5 @@
 """Transcript-only lecture topics, preserving original speech and timestamps."""
-from .outline import build_outline
+from .outline import build_outline, recording_scope
 from .parallel import parallel_map
 from .prompts import AUDIO_STUDY_TASK, STUDY_CACHE_VERSION
 from .schemas import Study
@@ -14,16 +14,17 @@ def analyze_audio(store, check, model, search, record, transcript):
         raise ValueError("강의 녹음에서 발언을 찾지 못했습니다.")
     language = record["outputLanguage"] if record["outputLanguage"] != "auto" else transcript.get("language") or "ko"
     store.progress("alignment", 0, 1)
-    outline = build_outline(store, model, language, segments, [], [], transcript["durationSec"])
+    scope_start, scope_end = recording_scope(transcript)
+    outline = build_outline(store, model, language, segments, [], [], transcript["durationSec"], start_sec=scope_start, end_sec=scope_end)
     topics = [{"chapter": chapter["title"], **topic} for chapter in outline["chapters"] for topic in chapter["topics"]]
     if len(topics) > 360:
         raise ValueError("학습 구간이 너무 많습니다. 강의를 나누어 업로드하세요.")
     # Outline validation permits small rounding gaps. Close those gaps so no
     # short utterance disappears between two audio topics.
-    previous_end = 0
+    previous_end = scope_start
     for i, topic in enumerate(topics):
         topic["startSec"] = previous_end
-        topic["endSec"] = transcript["durationSec"] if i == len(topics) - 1 else min(topic["endSec"], transcript["durationSec"])
+        topic["endSec"] = scope_end if i == len(topics) - 1 else min(topic["endSec"], scope_end)
         previous_end = topic["endSec"]
     store.progress("alignment", 1, 1)
     audience = learner_profile(store, model, language, record, [{"title": topic["title"], "concepts": []} for topic in topics], segments)

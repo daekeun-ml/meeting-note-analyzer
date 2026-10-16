@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CONSTRAINTS, OUTPUT_LANGUAGES } from "./constants.js";
 import type { LectureAsset, LectureRecord, LectureUploadPlan } from "./lecture.js";
+import { audioProcessingOptionsSchema, type AudioProcessingOptions, type AudioProcessingReport, type ProcessedMediaLinks } from "./audio-processing.js";
 
 export const TECHNICAL_FIT_CRITERIA = ["domain_depth", "system_architecture", "technical_communication"] as const;
 export const AMAZON_LP_CRITERIA = [
@@ -51,6 +52,7 @@ export const interviewSettingsSchema = z.object({
 });
 export type InterviewSettings = z.output<typeof interviewSettingsSchema>;
 export const createInterviewSchema = z.object({
+  audioProcessing: audioProcessingOptionsSchema.optional(),
   title: z.string().trim().min(1).max(200),
   languageHint: z.enum(["ko", "en", "ja", "zh", "auto"]).default("auto"),
   audio: z.object({ fileName: z.string().trim().min(1).max(255).regex(/\.mp3$/i, "MP3 파일을 선택하세요"),
@@ -68,6 +70,7 @@ export interface InterviewRecord {
   currentStage?: InterviewStage; runId?: string; executionArn?: string; analysisClaim?: string; prepareClaim?: string;
   preparedAudioKey?: string; hasAudio?: boolean; durationSec?: number;
   transcriptKey?: string; documentKey?: string; markdownKey?: string; error?: string;
+  originalTranscriptKey?: string; audioProcessing?: AudioProcessingOptions; processing?: AudioProcessingReport;
   speakerHints?: { id: string; role: "candidate" | "interviewer" | "unknown"; label: string; confidence: number }[];
   createdAt: string; updatedAt: string; completedAt?: string;
 }
@@ -125,7 +128,7 @@ export interface InterviewDocument {
   resumeComparisons?: { claimId: string; status: "supported" | "gap" | "uncertain" | "not_tested"; explanation: string; readingNotes?: { claim: string; explanation: string }; exchangeIds: string[]; affectedCriteria: InterviewCriterion[] }[];
 }
 export interface CreateInterviewResponse { interview: InterviewDto; upload: LectureUploadPlan; resumeUpload?: LectureUploadPlan }
-export interface InterviewResultLinks { interview: InterviewDto; documentUrl: string | null; transcriptUrl: string | null; audioUrl: string | null; markdownUrl: string | null; resumeUrl?: string | null }
+export interface InterviewResultLinks extends ProcessedMediaLinks { interview: InterviewDto; documentUrl: string | null; transcriptUrl: string | null; originalTranscriptUrl?: string | null; audioUrl: string | null; markdownUrl: string | null; resumeUrl?: string | null }
 export type InterviewResult = Omit<InterviewResultLinks, "documentUrl"> & { document: InterviewDocument | null };
 export const interviewKeys = {
   record: (id: string) => ({ PK: `MEETING#${id}`, SK: "META" as const }), // Separate interview table, shared STT record convention.

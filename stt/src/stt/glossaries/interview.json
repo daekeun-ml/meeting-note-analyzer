@@ -1,0 +1,162 @@
+{
+  "version": "2026-10-16.v1",
+  "domain": "interview",
+  "entries": [
+    {
+      "id": "interview.leadership-principles",
+      "term": "Leadership Principles",
+      "aliases": [
+        "리더십 프린시플",
+        "리더십 프린시플스",
+        "리더쉽 프린시플"
+      ]
+    },
+    {
+      "id": "interview.customer-obsession",
+      "term": "Customer Obsession",
+      "aliases": [
+        "커스터머 옵세션",
+        "커스토머 옵세션"
+      ]
+    },
+    {
+      "id": "interview.ownership",
+      "term": "Ownership",
+      "aliases": [
+        "오너십",
+        "오너쉽"
+      ]
+    },
+    {
+      "id": "interview.invent-and-simplify",
+      "term": "Invent and Simplify",
+      "aliases": [
+        "인벤트 앤 심플리파이"
+      ]
+    },
+    {
+      "id": "interview.learn-and-be-curious",
+      "term": "Learn and Be Curious",
+      "aliases": [
+        "런 앤 비 큐리어스"
+      ]
+    },
+    {
+      "id": "interview.think-big",
+      "term": "Think Big",
+      "aliases": [
+        "씽크 빅",
+        "싱크 빅"
+      ]
+    },
+    {
+      "id": "interview.bias-for-action",
+      "term": "Bias for Action",
+      "aliases": [
+        "바이어스 포 액션",
+        "바이아스 포 액션"
+      ]
+    },
+    {
+      "id": "interview.earn-trust",
+      "term": "Earn Trust",
+      "aliases": [
+        "언 트러스트",
+        "언트러스트"
+      ]
+    },
+    {
+      "id": "interview.dive-deep",
+      "term": "Dive Deep",
+      "aliases": [
+        "다이브 딥",
+        "다이브딥"
+      ]
+    },
+    {
+      "id": "interview.deliver-results",
+      "term": "Deliver Results",
+      "aliases": [
+        "딜리버 리절트",
+        "딜리버 리절츠"
+      ]
+    },
+    {
+      "id": "interview.technical-fit",
+      "term": "Technical Fit",
+      "aliases": [
+        "테크니컬 핏",
+        "테크니컬피트"
+      ]
+    },
+    {
+      "id": "interview.domain-depth",
+      "term": "Domain Depth",
+      "aliases": [
+        "도메인 뎁스",
+        "도메인 데프스"
+      ]
+    },
+    {
+      "id": "interview.system-architecture",
+      "term": "System Architecture",
+      "aliases": [
+        "시스템 아키텍쳐"
+      ]
+    },
+    {
+      "id": "interview.technical-communication",
+      "term": "Technical Communication",
+      "aliases": [
+        "테크니컬 커뮤니케이션"
+      ]
+    },
+    {
+      "id": "interview.solutions-architect",
+      "term": "Solutions Architect",
+      "aliases": [
+        "솔루션즈 아키텍트",
+        "솔루션 아키텍트"
+      ]
+    },
+    {
+      "id": "interview.star-method",
+      "term": "STAR method",
+      "aliases": [
+        "스타 기법",
+        "스타 메소드"
+      ]
+    },
+    {
+      "id": "interview.proof-of-concept",
+      "term": "proof of concept",
+      "aliases": [
+        "프루프 오브 컨셉",
+        "프루프 오브 콘셉트"
+      ]
+    },
+    {
+      "id": "interview.trade-off",
+      "term": "trade-off",
+      "aliases": [
+        "트레이드오프",
+        "트레이드 오프"
+      ]
+    },
+    {
+      "id": "interview.stakeholder",
+      "term": "stakeholder",
+      "aliases": [
+        "스테이크홀더",
+        "스테이크 홀더"
+      ]
+    },
+    {
+      "id": "interview.root-cause-analysis",
+      "term": "root cause analysis",
+      "aliases": [
+        "루트 코즈 애널리시스"
+      ]
+    }
+  ]
+}

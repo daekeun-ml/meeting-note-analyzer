@@ -91,4 +91,4 @@ async def invocations(request: Request) -> Response:
         log.exception("processing failed")
         return JSONResponse(status_code=400, content={"error": str(exc), "meetingId": req.meetingId})
     log.info("done meeting=%s duration=%.1fs segments=%d stats=%s", req.meetingId, resp.durationSec, len(resp.segments), resp.stats)
-    return JSONResponse(status_code=200, content=resp.model_dump())
+    return JSONResponse(status_code=200, content=resp.model_dump(exclude_none=True))

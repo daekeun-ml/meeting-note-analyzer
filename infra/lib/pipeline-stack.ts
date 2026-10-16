@@ -115,6 +115,8 @@ export class PipelineStack extends Stack {
         meetingId: meetingFields.meetingId,
         ownerSub: meetingFields.ownerSub,
         audioKey: "{% $meeting.audioKey %}",
+        title: meetingFields.title,
+        audioProcessing: "{% $exists($meeting.audioProcessing) ? $meeting.audioProcessing : null %}",
         languageHint: "{% $exists($meeting.languageHint) ? $meeting.languageHint : null %}",
         resume: resumeField,
         transcriptKey: "{% $exists($meeting.transcriptKey) ? $meeting.transcriptKey : null %}",

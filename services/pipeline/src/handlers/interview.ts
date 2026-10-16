@@ -3,7 +3,7 @@ import { GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/
 import { deletePrefix, env, getInterview, notifyUser, readJson, releaseInterviewSlot, requireEnv, s3, updateInterviewRun } from "@meeting-notes/backend";
 import { interviewKeys, interviewUploadsComplete, sttOutputSchema, type InterviewDocument } from "@meeting-notes/shared";
 import { handler as startStt } from "./start-transcription.js";
-import { normalize } from "./normalize-transcript.js";
+import { normalize, persistTranscripts } from "./normalize-transcript.js";
 import { parseS3Uri } from "../lib/s3-uri.js";
 
 interface Input {
@@ -36,7 +36,8 @@ export const handler = async (input: Input) => {
         catch (error) { if ((error as { name?: string }).name !== "NotFound") throw error; transcriptKey = undefined; }
       }
       return startStt({ kind: "interview", taskToken: input.taskToken, meetingId: input.interviewId, ownerSub: record.owner,
-        audioKey: record.preparedAudioKey ?? record.assets.audio.key, languageHint: record.languageHint, resume: !!transcriptKey, transcriptKey });
+        audioKey: record.preparedAudioKey ?? record.assets.audio.key, languageHint: record.languageHint, resume: !!transcriptKey, transcriptKey,
+        title: record.title, context: record.settings?.roleTitle, audioProcessing: record.audioProcessing });
     }
     case "normalize": {
       if (input.stt?.skipped && record.transcriptKey) { await update({ status: "ANALYZING" }); return { transcriptKey: record.transcriptKey }; }
@@ -47,8 +48,9 @@ export const handler = async (input: Input) => {
       const transcript = normalize(sttOutputSchema.parse(JSON.parse(await object.Body!.transformToString())));
       if (transcript.meetingId !== input.interviewId || !transcript.segments.length) throw new Error("Valid interview speech was not found");
       const key = `${interviewKeys.resultPrefix(input.interviewId)}transcript.json`;
-      await s3.send(new PutObjectCommand({ Bucket: env.dataBucket, Key: key, Body: JSON.stringify(transcript), ContentType: "application/json" }));
-      await update({ transcriptKey: key, durationSec: transcript.durationSec, status: "ANALYZING", stages: { ...record.stages, stt: { status: "COMPLETED" } } });
+      const saved = await persistTranscripts(transcript, key, "interview", input.interviewId);
+      await update({ transcriptKey: key, originalTranscriptKey: saved.originalTranscriptKey, processing: saved.processing,
+        durationSec: transcript.durationSec, status: "ANALYZING", stages: { ...record.stages, stt: { status: "COMPLETED" } } });
       return { transcriptKey: key };
     }
     case "prepare":

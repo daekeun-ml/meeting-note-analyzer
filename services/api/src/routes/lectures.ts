@@ -6,6 +6,7 @@ import { abortMultipartUpload, claimLectureSlot, completeMultipartUpload, create
 import { CONSTRAINTS, LECTURE_LIMITS, SLIDE_TYPES, lectureKeys, lectureUploadsComplete, toLectureDto, type CompleteLectureUpload, type CreateLectureResponse, type LectureRecord, type LectureResultLinks, createLectureSchema } from "@meeting-notes/shared";
 import type { z } from "zod";
 import type { LecturePreferences } from "@meeting-notes/shared";
+import { markProcessingDeleted, processedMediaLinks } from "../lib/processed-media.js";
 import { HttpError, type Caller } from "../lib/http.js";
 
 const sfn = new SFNClient({});
@@ -29,6 +30,7 @@ export async function createLecture(caller: Caller, input: z.output<typeof creat
       lectureId: id, owner: caller.sub, title: input.title, course: input.course, outputLanguage: input.outputLanguage, languageHint: input.languageHint,
       ...(input.customPrompt ? { customPrompt: input.customPrompt } : {}),
       ...(input.preferences ? { preferences: input.preferences } : {}),
+      ...(input.audioProcessing ? { audioProcessing: input.audioProcessing } : {}),
       ...(input.slideRange ? { slideRange: input.slideRange } : {}),
       status: "UPLOAD_PENDING", stages: {}, createdAt: now, updatedAt: now,
       assets: { [mediaKind]: { ...mediaInput, key: mediaKey, uploadId: media.uploadId, complete: false }, ...(slides && input.slides ? { slides: { ...input.slides, key: slidesKey, uploadId: slides.uploadId, complete: false } } : {}) },
@@ -108,12 +110,15 @@ export async function lectureResult(caller: Caller, id: string): Promise<Lecture
     rec.assets.video?.complete ? presignDownload(rec.assets.video.key) : null,
     rec.transcriptKey ? presignDownload(rec.transcriptKey) : null,
   ]);
-  return { lecture: toLectureDto(rec), documentUrl, audioUrl, videoUrl, slidesUrl, markdownUrl, flashcardsUrl, pageImages, transcriptUrl };
+  const processed = await processedMediaLinks("lecture", id, rec.title, rec.processing, { audio: rec.assets.audio?.key, video: rec.assets.video?.key });
+  const originalTranscriptUrl = rec.originalTranscriptKey ? await presignDownload(rec.originalTranscriptKey) : undefined;
+  return { lecture: toLectureDto(rec), documentUrl, audioUrl, videoUrl, slidesUrl, markdownUrl, flashcardsUrl, pageImages, transcriptUrl, ...processed, ...(originalTranscriptUrl ? { originalTranscriptUrl } : {}) };
 }
 export async function removeLecture(caller: Caller, id: string) {
   const rec = await ownedLecture(caller, id);
   if (!["UPLOAD_PENDING", "FAILED", "COMPLETED"].includes(rec.status)) throw new HttpError(409, "처리가 끝난 후 삭제할 수 있습니다", "processing");
   await ddb.send(new UpdateCommand({ TableName: lectureTable(), Key: lectureKeys.record(id), UpdateExpression: "SET deleting = :yes", ConditionExpression: "#status = :status", ExpressionAttributeNames: { "#status": "status" }, ExpressionAttributeValues: { ":yes": true, ":status": rec.status } }));
+  await markProcessingDeleted("lecture", id);
   await Promise.all(Object.values(rec.assets).filter((a) => !a.complete).map((a) => abortMultipartUpload(a.key, a.uploadId)));
   await Promise.all([deletePrefix(lectureKeys.inputPrefix(caller.sub, id)), deletePrefix(lectureKeys.resultPrefix(id))]);
   await ddb.send(new DeleteCommand({ TableName: lectureTable(), Key: lectureKeys.record(id), ConditionExpression: "deleting = :yes", ExpressionAttributeValues: { ":yes": true } }));

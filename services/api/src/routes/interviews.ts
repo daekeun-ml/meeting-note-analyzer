@@ -7,6 +7,7 @@ import { INTERVIEW_LIMITS, interviewKeys, interviewUploadsComplete, toInterviewD
 import type { z } from "zod";
 import { HttpError, type Caller } from "../lib/http.js";
 import { validateParts } from "./lectures.js";
+import { markProcessingDeleted, processedMediaLinks } from "../lib/processed-media.js";
 
 const sfn = new SFNClient({});
 export async function ownedInterview(caller: Caller, id: string) {
@@ -24,6 +25,7 @@ export async function createInterview(caller: Caller, input: z.output<typeof cre
     if (input.resume) resumeUpload = await createMultipartUpload(resumeKey, "application/pdf", input.resume.fileSize, INTERVIEW_LIMITS.uploadExpirySec);
     const record: InterviewRecord = { ...interviewKeys.record(id), GSI1PK: interviewKeys.user(caller.sub), GSI1SK: now,
       interviewId: id, owner: caller.sub, title: input.title, languageHint: input.languageHint, settings: input.settings,
+      ...(input.audioProcessing ? { audioProcessing: input.audioProcessing } : {}),
       status: "UPLOAD_PENDING", stages: {}, createdAt: now, updatedAt: now,
       assets: { audio: { ...input.audio, key, uploadId: upload.uploadId, complete: false },
         ...(input.resume && resumeUpload ? { resume: { ...input.resume, key: resumeKey, uploadId: resumeUpload.uploadId, complete: false } } : {}) } };
@@ -92,7 +94,9 @@ export async function interviewResult(caller: Caller, id: string): Promise<Inter
     record.markdownKey ? presignDownload(record.markdownKey) : null,
     record.assets.resume?.complete ? presignDownload(record.assets.resume.key) : null,
   ]);
-  return { interview: toInterviewDto(record), documentUrl, transcriptUrl, audioUrl, markdownUrl, resumeUrl };
+  const processed = await processedMediaLinks("interview", id, record.title, record.processing, { audio: record.assets.audio.key });
+  const originalTranscriptUrl = record.originalTranscriptKey ? await presignDownload(record.originalTranscriptKey) : undefined;
+  return { interview: toInterviewDto(record), documentUrl, transcriptUrl, audioUrl, markdownUrl, resumeUrl, ...processed, ...(originalTranscriptUrl ? { originalTranscriptUrl } : {}) };
 }
 export async function interviewMarkdown(caller: Caller, id: string): Promise<Buffer> {
   const record = await ownedInterview(caller, id);
@@ -117,6 +121,7 @@ export async function removeInterview(caller: Caller, id: string) {
   if (!["UPLOAD_PENDING", "FAILED", "COMPLETED"].includes(record.status)) throw new HttpError(409, "처리가 끝난 뒤 삭제할 수 있습니다", "processing");
   await ddb.send(new UpdateCommand({ TableName: interviewTable(), Key: interviewKeys.record(id), UpdateExpression: "SET deleting = :yes",
     ConditionExpression: "#status = :old", ExpressionAttributeNames: { "#status": "status" }, ExpressionAttributeValues: { ":yes": true, ":old": record.status } }));
+  await markProcessingDeleted("interview", id);
   await Promise.all(Object.values(record.assets).filter((asset) => !asset.complete).map((asset) => abortMultipartUpload(asset.key, asset.uploadId)));
   await Promise.all([deletePrefix(interviewKeys.inputPrefix(caller.sub, id)), deletePrefix(interviewKeys.resultPrefix(id))]);
   await ddb.send(new DeleteCommand({ TableName: interviewTable(), Key: interviewKeys.record(id), ConditionExpression: "deleting = :yes", ExpressionAttributeValues: { ":yes": true } }));

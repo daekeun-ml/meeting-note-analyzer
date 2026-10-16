@@ -1,4 +1,5 @@
 import type { MeetingStatus, OutputLanguage, Stage } from "./constants.js";
+import type { AudioProcessingOptions, AudioProcessingReport, ProcessedMediaLinks } from "./audio-processing.js";
 
 export type StageStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
 
@@ -32,6 +33,9 @@ export interface MeetingRecord {
   /** S3 multipart upload id while status is UPLOAD_PENDING (aborted on delete). */
   uploadId?: string;
   transcriptKey?: string;
+  originalTranscriptKey?: string;
+  audioProcessing?: AudioProcessingOptions;
+  processing?: AudioProcessingReport;
   notesKey?: string;
   /** Set while an execution adds only a brief to this published meeting; the meeting itself stays COMPLETED. */
   briefOnly?: boolean;
@@ -87,6 +91,7 @@ export interface TaskTokenRecord {
 
 /** Request/response DTOs for the HTTP API. */
 export interface CreateMeetingRequest {
+  audioProcessing?: AudioProcessingOptions;
   title?: string;
   fileName: string;
   fileSize: number;
@@ -126,7 +131,7 @@ export interface CompleteUploadRequest {
   parts: { partNumber: number; etag: string }[];
 }
 
-export interface MeetingResultResponse {
+export interface MeetingResultResponse extends ProcessedMediaLinks {
   meeting: MeetingDto;
   notes: unknown | null;
   transcriptUrl: string | null;

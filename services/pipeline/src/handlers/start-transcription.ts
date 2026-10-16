@@ -5,7 +5,7 @@ import { env, s3 } from "@meeting-notes/backend";
 import { pipelineEnv } from "../lib/env.js";
 import { setStage } from "../lib/meeting-updates.js";
 import { saveTaskToken } from "../lib/task-tokens.js";
-import { CONSTRAINTS, INTERVIEW_INFERENCE_PREFIX, LECTURE_INFERENCE_PREFIX } from "@meeting-notes/shared";
+import { CONSTRAINTS, INTERVIEW_INFERENCE_PREFIX, LECTURE_INFERENCE_PREFIX, type AudioProcessingOptions } from "@meeting-notes/shared";
 
 const smr = new SageMakerRuntimeClient({});
 
@@ -15,6 +15,11 @@ export interface StartTranscriptionInput {
   meetingId: string;
   ownerSub: string;
   audioKey: string;
+  videoKey?: string;
+  title?: string;
+  context?: string;
+  scopeModel?: "opus" | "sonnet";
+  audioProcessing?: AudioProcessingOptions;
   languageHint?: string;
   resume?: boolean;
   transcriptKey?: string | null;
@@ -27,6 +32,12 @@ export function buildSttRequest(input: StartTranscriptionInput, bucket: string, 
   return {
     meetingId: input.meetingId,
     audio_s3_uri: `s3://${bucket}/${input.audioKey}`,
+    kind: input.kind ?? "meeting",
+    title: input.title ?? "",
+    context: input.context?.slice(0, 1000) ?? "",
+    scope_model: input.scopeModel ?? "opus",
+    ...(input.videoKey ? { video_s3_uri: `s3://${bucket}/${input.videoKey}` } : {}),
+    ...(input.audioProcessing ? { processing: input.audioProcessing } : {}),
     language: input.languageHint && input.languageHint !== "auto" ? input.languageHint : null,
     mode,
     hotwords: [] as string[],

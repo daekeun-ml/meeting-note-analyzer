@@ -1,6 +1,6 @@
 import pytest
 
-from lecture_study.outline import topic_pages, transcript_windows, validate_outline
+from lecture_study.outline import build_outline, recording_scope, topic_pages, transcript_windows, validate_outline
 from lecture_study.schemas import VideoOutline
 
 
@@ -46,3 +46,27 @@ def test_long_transcripts_are_outlined_in_time_windows():
     assert transcript_windows(3000, window_sec=2700) == [(0, 1500), (1500, 3000)]  # balanced, not a 2700 + 300 tail
     assert transcript_windows(2700, window_sec=2700) == [(0, 2700)]
     assert transcript_windows(8000, window_sec=2700) == [(0, 2667), (2667, 5333), (5333, 8000)]
+
+
+def test_processed_outline_keeps_original_timestamps_and_excludes_edge_chatter():
+    transcript = {"durationSec": 360, "processing": {"scope": {"status": "applied", "startSec": 30, "endSec": 330}}}
+    assert recording_scope(transcript) == (30, 330)
+    assert recording_scope({"durationSec": 360}) == (0, 360)
+    calls = []
+
+    class Store:
+        def cached(self, key, build):
+            return build()
+
+    class Model:
+        def generate(self, schema, task, data, validate):
+            calls.append(data)
+            result = outline(("main", data["windowStart"], data["windowEnd"]))
+            validate(result)
+            return result
+
+    segments = [{"start": 0, "end": 20, "text": "unrelated"}, {"start": 40, "end": 320, "text": "lecture"}, {"start": 340, "end": 360, "text": "unrelated"}]
+    result = build_outline(Store(), Model(), "en", segments, [], [], 360, start_sec=30, end_sec=330)
+    assert [s["text"] for s in calls[0]["speech"]] == ["lecture"]
+    assert result["chapters"][0]["topics"][0]["startSec"] == 30
+    assert result["chapters"][0]["topics"][0]["endSec"] == 330

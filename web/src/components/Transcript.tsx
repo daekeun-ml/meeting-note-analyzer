@@ -95,12 +95,13 @@ export function Transcript({ title = "전사", transcriptUrl, originalTranscript
     const seg = data?.segments.find((s) => s.id === id);
     if (seg) seekTime(seg.start);
   };
-  const exportOriginal = original || (!originalTranscriptUrl && !data?.attributed);
-  const exportLabel = exportOriginal ? "원본 전사" : "보정 전사";
+  const exportOriginal = original || (!originalTranscriptUrl && !data?.attributed && !data?.processing);
+  const processedOnly = !exportOriginal && !!data?.processing && !data?.attributed;
+  const exportLabel = exportOriginal ? "원본 전사" : processedOnly ? "전처리 전사" : "보정 전사";
   function download(format: "txt" | "md") {
     if (!data) return;
     setDownloadError("");
-    try { downloadTranscript(data, { title, variant: exportOriginal ? "original" : "corrected", format, speakerLabels, speakerRoleLabels, confirmedSpeakerNames }); }
+    try { downloadTranscript(data, { title, variant: exportOriginal ? "original" : processedOnly ? "processed" : "corrected", format, speakerLabels, speakerRoleLabels, confirmedSpeakerNames }); }
     catch { setDownloadError("전사 파일을 저장하지 못했습니다. 다시 시도하세요."); }
   }
 
@@ -126,7 +127,13 @@ export function Transcript({ title = "전사", transcriptUrl, originalTranscript
           <Button size="sm" variant="secondary" aria-label={`${exportLabel} TXT 다운로드`} onClick={() => download("txt")}>TXT 다운로드</Button>
           <Button size="sm" variant="secondary" aria-label={`${exportLabel} Markdown 다운로드`} onClick={() => download("md")}>Markdown 다운로드</Button>
         </div>{downloadError && <InlineError>{downloadError}</InlineError>}</div>
-        {original && <p className="text-xs text-ink-3 mb-3">음성 분석에서 구분한 원래 화자입니다. 발언 내용과 시간은 보정 전사와 같습니다.</p>}
+        {original && <p className="text-xs text-ink-3 mb-3">음성 인식 원문과 원래 화자입니다. 용어 교정이나 구간 제외 전의 전체 발언을 확인할 수 있습니다.</p>}
+        {!original && data.processing && <details className="rounded-xl border border-line p-3 mb-3 text-xs text-ink-2">
+          <summary className="cursor-pointer font-semibold">전처리 구간 근거</summary>
+          <p className="mt-2">원본 {hms(data.processing.scope.startSec)}–{hms(data.processing.scope.endSec)} 구간을 분석했습니다. 발언 시간은 원본 기준입니다.</p>
+          {data.processing.scope.evidence.map((evidence, i) => <blockquote key={i} className="mt-2">{evidence.quote}</blockquote>)}
+          {data.processing.scope.reviewReasons.map((reason, i) => <p key={i} className="mt-2">{reason}</p>)}
+        </details>}
         {!original && data.attributed && !data.speakerAttribution && <p className="text-xs text-ink-3 mb-3">이전 방식으로 보정된 전사입니다. 발언별 검토 정보는 없습니다. 원본과 비교해 확인해 주세요.</p>}
         {!original && data.speakerAttribution && (
           <div className="rounded-xl border border-line bg-surface p-3 mb-3 text-sm" aria-label="화자 보정 상태">
@@ -170,6 +177,12 @@ export function Transcript({ title = "전사", transcriptUrl, originalTranscript
                   </div>
                 </button>
                 {changes.length > 0 && <div className="px-3 pb-2"><CorrectionDetails corrections={changes} onSeek={seek} hasAudio={!!stableAudio} /></div>}
+                {!original && (seg.termCorrections?.length || seg.termSuggestions?.length) ? <details className="px-3 pb-2 text-xs text-ink-3">
+                  <summary className="cursor-pointer">용어 교정과 확인 후보</summary>
+                  {seg.originalText && <p className="mt-2 whitespace-pre-wrap">교정 전: {seg.originalText}</p>}
+                  {seg.termCorrections?.map((term, i) => <p key={`c${i}`} className="mt-1">{term.original} → {term.replacement}</p>)}
+                  {seg.termSuggestions?.map((term, i) => <p key={`s${i}`} className="mt-1">확인 후보 (미적용): {term.original} → {term.candidate}</p>)}
+                </details> : null}
               </li>
             );
           })}

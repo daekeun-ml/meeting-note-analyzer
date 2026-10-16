@@ -2,7 +2,7 @@ import type { Transcript } from "@meeting-notes/shared";
 
 export type TranscriptExportOptions = {
   title: string;
-  variant: "original" | "corrected";
+  variant: "original" | "corrected" | "processed";
   format: "txt" | "md";
   speakerLabels?: Record<string, string>;
   speakerRoleLabels?: Record<string, string>;
@@ -21,11 +21,14 @@ function escapeMarkdown(text: string) {
 export function transcriptExport(transcript: Transcript, options: TranscriptExportOptions) {
   const { title, variant, format, speakerLabels = {}, speakerRoleLabels, confirmedSpeakerNames = [] } = options;
   const original = variant === "original";
-  const version = original ? "원본 전사" : "보정 전사";
+  const version = original ? "원본 전사" : variant === "processed" ? "전처리 전사" : "보정 전사";
   const text = format === "md" ? escapeMarkdown : (value: string) => value;
   const lines = [`${format === "md" ? "# " : ""}${text(title)} — ${version}`, "",
     `길이: ${timestamp(transcript.durationSec)} · 언어: ${text(transcript.language ?? "미확인")}`, "",
-    speakerRoleLabels ? "원본 발언과 시간을 유지하고 화자는 역할로 표시합니다." : original ? "음성 인식 결과의 원래 화자와 발언입니다." : "화자 보정과 표시 이름을 반영한 전사입니다. 발언 내용과 시간은 원본 전사를 유지합니다.", ""];
+    original ? "음성 인식 결과의 원래 화자와 발언입니다." : transcript.processing
+      ? "용어 표기와 분석 구간을 반영했습니다. 모든 시간은 원본 녹음 기준입니다."
+      : speakerRoleLabels ? "원본 발언과 시간을 유지하고 화자는 역할로 표시합니다." : "화자 보정과 표시 이름을 반영한 전사입니다. 발언 내용과 시간은 원본 전사를 유지합니다.", ""];
+  if (!original && transcript.processing) lines.push(`분석 구간: ${timestamp(transcript.processing.scope.startSec)}–${timestamp(transcript.processing.scope.endSec)}`, "");
   const corrections = original ? [] : (transcript.speakerAttribution?.corrections ?? [])
     .filter((c) => !(c.kind === "label" && confirmedSpeakerNames.includes(c.to)));
   if (!original && transcript.attributed && !transcript.speakerAttribution) lines.push("이전 방식으로 보정된 전사로, 발언별 검토 정보가 없습니다.", "");
@@ -36,6 +39,7 @@ export function transcriptExport(transcript: Transcript, options: TranscriptExpo
     const pendingSpeaker = !original && transcript.speakers.some((s) => s.id === seg.speaker && s.reviewRequired && !s.nameConfirmedByUser && !confirmedSpeakerNames.includes(s.id));
     const pending = reviews.length > 0 || pendingSpeaker || (!original && seg.speakerReviewRequired && !transcript.speakerAttribution);
     lines.push(`[${timestamp(seg.start)}–${timestamp(seg.end)}] ${text(identity)}${pending ? " [화자 검토 필요, 제안 미적용]" : ""}${speakerRoleLabels ? "" : ` (${text(seg.id)})`}`, text(seg.text), "");
+    if (!original && seg.originalText) lines.push(`교정 전: ${text(seg.originalText)}`, "");
   }
   if (corrections.length) {
     lines.push(`${format === "md" ? "## " : ""}화자 보정 기록`, "");
@@ -47,7 +51,7 @@ export function transcriptExport(transcript: Transcript, options: TranscriptExpo
     }
   }
   const safeTitle = Array.from(title.replace(/[<>:"/\\|?*\u0000-\u001f\u007f]/g, "_").trim()).slice(0, 100).join("").replace(/[. ]+$/, "") || "전사";
-  return { content: lines.join("\n"), filename: `${safeTitle}_${original ? "원본전사" : "보정전사"}.${format}`, contentType: format === "md" ? "text/markdown;charset=utf-8" : "text/plain;charset=utf-8" };
+  return { content: lines.join("\n"), filename: `${safeTitle}_${original ? "원본전사" : variant === "processed" ? "전처리전사" : "보정전사"}.${format}`, contentType: format === "md" ? "text/markdown;charset=utf-8" : "text/plain;charset=utf-8" };
 }
 
 export function downloadTranscript(transcript: Transcript, options: TranscriptExportOptions) {

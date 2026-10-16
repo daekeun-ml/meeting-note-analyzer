@@ -5,6 +5,7 @@ import {
   ACTIVE_STATUSES,
   CONSTRAINTS,
   OUTPUT_LANGUAGES,
+  audioProcessingOptionsSchema,
   s3Keys,
   meetingKeys,
   toMeetingDto,
@@ -19,10 +20,12 @@ import { claimRetry, countActiveMeetings, deleteMeeting, DocumentBusyError, getM
 import { HttpError, type Caller } from "../lib/http.js";
 import { abortMultipartUpload, applySpeakerLabels, completeMultipartUpload, createMultipartUpload, deleteMeetingMemory, deletePrefix, headObject, presignDownload, presignUpload, putFinalDocument, readJson } from "@meeting-notes/backend";
 import { apiEnv } from "../lib/env.js";
+import { markProcessingDeleted, processedMediaLinks } from "../lib/processed-media.js";
 
 const sfn = new SFNClient({});
 
 export const createMeetingSchema = z.object({
+  audioProcessing: audioProcessingOptionsSchema.optional(),
   title: z.string().trim().min(1).max(200).optional(),
   fileName: z.string().trim().min(1).max(255),
   fileSize: z.number().int().positive().max(CONSTRAINTS.maxUploadBytes, "파일이 너무 큽니다 (최대 500MB)"),
@@ -52,6 +55,7 @@ export function buildMeetingRecord(caller: Caller, input: CreateMeetingInput, no
     contentType: input.contentType,
     outputLanguage: input.outputLanguage,
     languageHint: input.languageHint,
+    ...(input.audioProcessing ? { audioProcessing: input.audioProcessing } : {}),
     createdAt,
     updatedAt: createdAt,
   };
@@ -125,12 +129,13 @@ export async function getMeetingResult(caller: Caller, meetingId: string): Promi
   const transcriptKey = attributed ? attributedKey : rec.transcriptKey;
   const [transcriptUrl, originalTranscriptUrl, audioUrl, notesMarkdownUrl] = await Promise.all([
     transcriptKey ? presignDownload(transcriptKey) : Promise.resolve(null),
-    attributed && rec.transcriptKey ? presignDownload(rec.transcriptKey) : Promise.resolve(null),
+    rec.originalTranscriptKey ? presignDownload(rec.originalTranscriptKey) : attributed && rec.transcriptKey ? presignDownload(rec.transcriptKey) : Promise.resolve(null),
     rec.status !== "UPLOAD_PENDING" ? presignDownload(rec.audioKey) : Promise.resolve(null),
     // Derive the markdown key from the stored document key so meetings finalized under the old key layout keep working.
     rec.notesKey ? presignDownload(rec.notesKey.replace(/\.json$/, ".md")) : Promise.resolve(null),
   ]);
-  return { meeting: toMeetingDto(rec), notes, transcriptUrl, originalTranscriptUrl,
+  const processed = await processedMediaLinks("meeting", meetingId, rec.title, rec.processing, { audio: rec.audioKey });
+  return { meeting: toMeetingDto(rec), notes, transcriptUrl, originalTranscriptUrl, ...processed,
     transcriptRevision: attributed?.revision ?? rec.stages?.transcript_analysis?.startedAt ?? rec.createdAt, audioUrl, notesMarkdownUrl };
 }
 
@@ -148,6 +153,7 @@ export async function removeMeeting(caller: Caller, meetingId: string): Promise<
     if (rec.uploadId && rec.status === "UPLOAD_PENDING") await abortMultipartUpload(rec.audioKey, rec.uploadId).catch(() => undefined);
     // Memory first: if this fails the meeting stays visible and the user can delete again.
     if (apiEnv.memoryId) await deleteMeetingMemory(apiEnv.memoryId, rec.owner, meetingId, rec.title);
+    await markProcessingDeleted("meeting", meetingId);
     await Promise.all([
       deletePrefix(s3Keys.meetingPrefix(caller.sub, meetingId)),
       deletePrefix(`transcripts/${meetingId}/`),

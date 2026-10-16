@@ -44,7 +44,7 @@ jobs:
         with:
           version: "0.9.8"
           python-version: "3.12"
-      - if: matrix.directory == 'lecture'
+      - if: matrix.directory == 'lecture' || matrix.directory == 'stt'
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: uv sync --frozen --extra dev
         working-directory: ${{ matrix.directory }}

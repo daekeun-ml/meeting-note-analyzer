@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 import tempfile
 import time
@@ -11,7 +12,8 @@ from typing import Protocol
 import boto3
 
 from .align import Turn, assign_speakers, build_segments, relabel_speakers, speaker_stats
-from .audio import probe_duration, to_wav16k
+from .audio import denoise_wav, estimate_noise_floor, probe_duration, to_wav16k
+from .processing import process_transcript
 from .schemas import SttRequest, SttResponse, Word
 
 log = logging.getLogger("stt")
@@ -40,9 +42,20 @@ class Engine:
             src = Path(tmp) / "audio.mp3"
             self._download(req.audio_s3_uri, src)
             duration = probe_duration(src)
+            if not math.isfinite(duration) or duration <= 0:
+                raise ValueError("audio duration is invalid")
             if duration > MAX_DURATION_SEC:
                 raise ValueError(f"audio too long: {duration:.0f}s > {MAX_DURATION_SEC:.0f}s")
             wav = to_wav16k(src, Path(tmp) / "audio.wav")
+            noise = {"status": "disabled", "method": "fft", "reductionDb": 0}
+            if req.processing.denoise:
+                try:
+                    floor = estimate_noise_floor(wav)
+                    wav = denoise_wav(wav, Path(tmp) / "denoised.wav", floor)
+                    noise = {"status": "applied", "method": "fft", "reductionDb": 6, "noiseFloorDb": round(floor, 2)}
+                except Exception as error:
+                    log.warning("Noise reduction failed; retaining normalized input: %s", type(error).__name__)
+                    noise = {"status": "failed", "method": "fft", "reductionDb": 0}
             t1 = time.time()
             tr = self.transcriber.transcribe(wav, language=req.language, mode=req.mode, hotwords=req.hotwords)
             t2 = time.time()
@@ -50,13 +63,14 @@ class Engine:
             if self.diarizer is not None and req.diarization.enabled:
                 turns = self.diarizer.diarize(wav, min_speakers=req.diarization.min_speakers, max_speakers=req.diarization.max_speakers)
             t3 = time.time()
-        return build_response(req, tr.words, tr.language, tr.language_probability, turns, duration, self.transcriber.name, {
-            "prepSec": round(t1 - t0, 2),
-            "sttSec": round(t2 - t1, 2),
-            "diarizeSec": round(t3 - t2, 2),
-            "wordCount": len(tr.words),
-            "turnCount": len(turns),
-        })
+            raw = build_response(req, tr.words, tr.language, tr.language_probability, turns, duration, self.transcriber.name, {
+                "prepSec": round(t1 - t0, 2),
+                "sttSec": round(t2 - t1, 2),
+                "diarizeSec": round(t3 - t2, 2),
+                "wordCount": len(tr.words),
+                "turnCount": len(turns),
+            })
+            return process_transcript(raw, req, wav, Path(tmp), self.s3, noise)
 
     def _download(self, uri: str, dst: Path) -> None:
         if not uri.startswith("s3://"):

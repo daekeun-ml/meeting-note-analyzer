@@ -1,3 +1,5 @@
+import { DEFAULT_AUDIO_PROCESSING } from "@meeting-notes/shared";
+import { AudioProcessingSettings } from "../components/AudioProcessingSettings";
 import { useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -39,6 +41,7 @@ function MeetingUploadForm() {
   const qc = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
+  const [audioProcessing, setAudioProcessing] = useState(DEFAULT_AUDIO_PROCESSING);
   const [lang, setLang] = useState<OutputLanguage>("ko");
   const [hint, setHint] = useState("auto");
   const [progress, setProgress] = useState<number | null>(null);
@@ -60,7 +63,7 @@ function MeetingUploadForm() {
     setError(null);
     try {
       setProgress(0);
-      const res = await api.createMeeting({ title: title.trim() || undefined, fileName: file.name, fileSize: file.size, contentType: "audio/mpeg", outputLanguage: lang, languageHint: hint === "auto" ? undefined : hint });
+      const res = await api.createMeeting({ title: title.trim() || undefined, fileName: file.name, fileSize: file.size, contentType: "audio/mpeg", outputLanguage: lang, audioProcessing, languageHint: hint === "auto" ? undefined : hint });
       const parts = await uploadMultipart(file, res.upload, setProgress);
       await api.completeUpload(res.meeting.meetingId, { uploadId: res.upload.uploadId, parts });
       await qc.invalidateQueries({ queryKey: ["meetings"] });
@@ -76,6 +79,7 @@ function MeetingUploadForm() {
       <FilePicker label="회의 녹음" accept="audio/mpeg,.mp3" file={file} disabled={busy} onFile={pick} onError={setError}
         icon={<IconFileAudio className="text-accent" />} buttonLabel="mp3 파일 선택" hint="MP3 · 최대 500MB, 여러 언어가 섞인 회의도 됩니다" />
 
+      <AudioProcessingSettings value={audioProcessing} onChange={setAudioProcessing} disabled={busy} />
       <div className="mt-6">
         <SectionLabel>제목</SectionLabel>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 9월 첫째 주 주간회의" disabled={busy} className="mt-2 w-full h-12 rounded-xl bg-surface border border-line px-4 text-[16px] placeholder:text-ink-3 focus:outline-none focus:border-accent" />

@@ -79,6 +79,17 @@ export class SttStack extends Stack {
       dataBucket.grantRead(role, "interview-uploads/*/audio.mp3");
       dataBucket.grantRead(role, "lecture-results/*/video/audio.mp3");
       dataBucket.grantReadWrite(role, "stt/*");
+      role.addToPolicy(new iam.PolicyStatement({
+        actions: ["s3:PutObject", "s3:AbortMultipartUpload", "s3:DeleteObject"],
+        resources: ["results", "lecture-results", "interview-results"].map((prefix) => dataBucket.arnForObjects(`${prefix}/*/processed/*`)),
+      }));
+      role.addToPolicy(new iam.PolicyStatement({
+        actions: ["bedrock:InvokeModel"],
+        resources: [...new Set([config.opusModel, config.sonnetModel])].flatMap((model) => [
+          `arn:${this.partition}:bedrock:*::foundation-model/${model.replace(/^(global|us|eu|au|jp)\./, "")}*`,
+          `arn:${this.partition}:bedrock:*:${this.account}:inference-profile/${model}`,
+        ]),
+      }));
       this.successTopic.grantPublish(role);
       this.errorTopic.grantPublish(role);
       image.repository.grantPull(role);
@@ -97,6 +108,9 @@ export class SttStack extends Stack {
             s3DataSource: { s3Uri: `s3://${dataBucket.bucketName}/${this.modelPrefix}`, s3DataType: "S3Prefix", compressionType: "None" },
           },
           environment: {
+            AWS_REGION: this.region,
+            STT_SCOPE_OPUS_MODEL: config.opusModel,
+            STT_SCOPE_SONNET_MODEL: config.sonnetModel,
             MODEL_DIR: "/opt/ml/model",
             STT_BACKEND: "ct2",
             CRISPERWHISPER_SUBDIR: "crisperwhisper/ct2",

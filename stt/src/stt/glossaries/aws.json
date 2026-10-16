@@ -1,0 +1,662 @@
+{
+  "version": "2026-10-16.v1",
+  "domain": "aws",
+  "entries": [
+    {
+      "id": "aws.aws",
+      "term": "AWS",
+      "aliases": [
+        "에이더블유에스",
+        "에이 더블유 에스",
+        "아마존 웹 서비스"
+      ]
+    },
+    {
+      "id": "aws.amazon-ec2",
+      "term": "Amazon EC2",
+      "aliases": [
+        "이씨투",
+        "이 씨 투",
+        "이시투",
+        "EC 2"
+      ]
+    },
+    {
+      "id": "aws.amazon-s3",
+      "term": "Amazon S3",
+      "aliases": [
+        "에스쓰리",
+        "에스 쓰리",
+        "에스 스리",
+        "S 3"
+      ]
+    },
+    {
+      "id": "aws.amazon-vpc",
+      "term": "Amazon VPC",
+      "aliases": [
+        "브이피씨",
+        "브이 피 씨"
+      ]
+    },
+    {
+      "id": "aws.iam",
+      "term": "IAM",
+      "aliases": [
+        "아이에이엠",
+        "아이 에이 엠"
+      ]
+    },
+    {
+      "id": "aws.aws-lambda",
+      "term": "AWS Lambda",
+      "aliases": [
+        "AWS 람다",
+        "아마존 람다",
+        "에이더블유에스 람다"
+      ],
+      "context": [
+        "AWS",
+        "아마존",
+        "서버리스",
+        "Lambda"
+      ],
+      "reviewAliases": [
+        "람다"
+      ]
+    },
+    {
+      "id": "aws.amazon-bedrock",
+      "term": "Amazon Bedrock",
+      "aliases": [
+        "베드록",
+        "베드 록",
+        "배드록",
+        "베드락"
+      ]
+    },
+    {
+      "id": "aws.amazon-bedrock-agentcore",
+      "term": "Amazon Bedrock AgentCore",
+      "aliases": [
+        "베드록 에이전트코어",
+        "베드록 에이전트 코어",
+        "에이전트코어"
+      ]
+    },
+    {
+      "id": "aws.amazon-sagemaker",
+      "term": "Amazon SageMaker",
+      "aliases": [
+        "세이지메이커",
+        "세이지 메이커",
+        "세이지메이크",
+        "세이지 메이크"
+      ]
+    },
+    {
+      "id": "aws.amazon-sagemaker-studio",
+      "term": "Amazon SageMaker Studio",
+      "aliases": [
+        "세이지메이커 스튜디오"
+      ]
+    },
+    {
+      "id": "aws.amazon-sagemaker-feature-store",
+      "term": "Amazon SageMaker Feature Store",
+      "aliases": [
+        "세이지메이커 피처 스토어",
+        "세이지메이커 피쳐스토어"
+      ]
+    },
+    {
+      "id": "aws.amazon-sagemaker-pipelines",
+      "term": "Amazon SageMaker Pipelines",
+      "aliases": [
+        "세이지메이커 파이프라인"
+      ]
+    },
+    {
+      "id": "aws.amazon-sagemaker-ground-truth",
+      "term": "Amazon SageMaker Ground Truth",
+      "aliases": [
+        "세이지메이커 그라운드 트루스"
+      ]
+    },
+    {
+      "id": "aws.amazon-q-developer",
+      "term": "Amazon Q Developer",
+      "aliases": [
+        "아마존 큐 디벨로퍼",
+        "아마존 큐 개발자"
+      ]
+    },
+    {
+      "id": "aws.amazon-q-business",
+      "term": "Amazon Q Business",
+      "aliases": [
+        "아마존 큐 비즈니스"
+      ]
+    },
+    {
+      "id": "aws.amazon-dynamodb",
+      "term": "Amazon DynamoDB",
+      "aliases": [
+        "다이나모디비",
+        "다이나모 디비",
+        "다이너모디비",
+        "다이나모 DB"
+      ]
+    },
+    {
+      "id": "aws.amazon-rds",
+      "term": "Amazon RDS",
+      "aliases": [
+        "아마존 알디에스",
+        "아마존 알 디 에스"
+      ],
+      "contextAliases": [
+        "알디에스"
+      ],
+      "context": [
+        "AWS",
+        "아마존",
+        "데이터베이스",
+        "DB"
+      ]
+    },
+    {
+      "id": "aws.amazon-aurora",
+      "term": "Amazon Aurora",
+      "aliases": [
+        "아마존 오로라"
+      ]
+    },
+    {
+      "id": "aws.amazon-redshift",
+      "term": "Amazon Redshift",
+      "aliases": [
+        "레드시프트",
+        "레드 시프트"
+      ]
+    },
+    {
+      "id": "aws.amazon-athena",
+      "term": "Amazon Athena",
+      "aliases": [
+        "아마존 아테나"
+      ]
+    },
+    {
+      "id": "aws.aws-glue",
+      "term": "AWS Glue",
+      "aliases": [
+        "AWS 글루",
+        "아마존 글루"
+      ]
+    },
+    {
+      "id": "aws.aws-lake-formation",
+      "term": "AWS Lake Formation",
+      "aliases": [
+        "레이크 포메이션",
+        "레이크포메이션"
+      ]
+    },
+    {
+      "id": "aws.amazon-emr",
+      "term": "Amazon EMR",
+      "aliases": [
+        "아마존 이엠알",
+        "아마존 이 엠 알"
+      ]
+    },
+    {
+      "id": "aws.amazon-kinesis",
+      "term": "Amazon Kinesis",
+      "aliases": [
+        "아마존 키네시스",
+        "키네시스"
+      ]
+    },
+    {
+      "id": "aws.amazon-msk",
+      "term": "Amazon MSK",
+      "aliases": [
+        "아마존 엠에스케이"
+      ]
+    },
+    {
+      "id": "aws.amazon-opensearch-service",
+      "term": "Amazon OpenSearch Service",
+      "aliases": [
+        "아마존 오픈서치",
+        "AWS 오픈서치"
+      ],
+      "contextAliases": [
+        "오픈서치"
+      ],
+      "context": [
+        "AWS",
+        "아마존",
+        "벡터",
+        "검색엔진",
+        "검색 엔진",
+        "인덱스"
+      ]
+    },
+    {
+      "id": "aws.amazon-quicksight",
+      "term": "Amazon QuickSight",
+      "aliases": [
+        "퀵사이트",
+        "퀵 사이트"
+      ]
+    },
+    {
+      "id": "aws.amazon-ecs",
+      "term": "Amazon ECS",
+      "aliases": [
+        "이씨에스",
+        "이 씨 에스"
+      ]
+    },
+    {
+      "id": "aws.amazon-eks",
+      "term": "Amazon EKS",
+      "aliases": [
+        "이케이에스",
+        "이 케이 에스"
+      ]
+    },
+    {
+      "id": "aws.amazon-ecr",
+      "term": "Amazon ECR",
+      "aliases": [
+        "이씨알",
+        "이 씨 알"
+      ]
+    },
+    {
+      "id": "aws.aws-fargate",
+      "term": "AWS Fargate",
+      "aliases": [
+        "파게이트",
+        "파 게이트"
+      ]
+    },
+    {
+      "id": "aws.aws-step-functions",
+      "term": "AWS Step Functions",
+      "aliases": [
+        "스텝펑션",
+        "스텝 펑션",
+        "스텝펑션스",
+        "스텝 펑션즈"
+      ]
+    },
+    {
+      "id": "aws.amazon-eventbridge",
+      "term": "Amazon EventBridge",
+      "aliases": [
+        "이벤트브리지",
+        "이벤트 브리지",
+        "이벤트브릿지"
+      ]
+    },
+    {
+      "id": "aws.amazon-sqs",
+      "term": "Amazon SQS",
+      "aliases": [
+        "에스큐에스",
+        "에스 큐 에스"
+      ]
+    },
+    {
+      "id": "aws.amazon-sns",
+      "term": "Amazon SNS",
+      "aliases": [
+        "아마존 에스엔에스",
+        "아마존 에스 엔 에스"
+      ]
+    },
+    {
+      "id": "aws.amazon-api-gateway",
+      "term": "Amazon API Gateway",
+      "aliases": [
+        "에이피아이 게이트웨이",
+        "API 게이트웨이"
+      ]
+    },
+    {
+      "id": "aws.amazon-cloudfront",
+      "term": "Amazon CloudFront",
+      "aliases": [
+        "클라우드프론트",
+        "클라우드 프론트",
+        "클라우드프런트"
+      ]
+    },
+    {
+      "id": "aws.amazon-route-53",
+      "term": "Amazon Route 53",
+      "aliases": [
+        "라우트 피프티쓰리",
+        "라우트 53",
+        "라우트 오십삼"
+      ]
+    },
+    {
+      "id": "aws.amazon-cloudwatch",
+      "term": "Amazon CloudWatch",
+      "aliases": [
+        "클라우드워치",
+        "클라우드 워치"
+      ]
+    },
+    {
+      "id": "aws.aws-cloudtrail",
+      "term": "AWS CloudTrail",
+      "aliases": [
+        "클라우드트레일",
+        "클라우드 트레일"
+      ]
+    },
+    {
+      "id": "aws.aws-cloudformation",
+      "term": "AWS CloudFormation",
+      "aliases": [
+        "클라우드포메이션",
+        "클라우드 포메이션",
+        "클라우드 포메이선"
+      ]
+    },
+    {
+      "id": "aws.aws-cdk",
+      "term": "AWS CDK",
+      "aliases": [
+        "AWS 씨디케이",
+        "에이더블유에스 씨디케이"
+      ]
+    },
+    {
+      "id": "aws.aws-codebuild",
+      "term": "AWS CodeBuild",
+      "aliases": [
+        "코드빌드",
+        "코드 빌드"
+      ]
+    },
+    {
+      "id": "aws.aws-codepipeline",
+      "term": "AWS CodePipeline",
+      "aliases": [
+        "코드파이프라인",
+        "코드 파이프라인"
+      ]
+    },
+    {
+      "id": "aws.aws-codedeploy",
+      "term": "AWS CodeDeploy",
+      "aliases": [
+        "코드디플로이",
+        "코드 디플로이"
+      ]
+    },
+    {
+      "id": "aws.aws-codecommit",
+      "term": "AWS CodeCommit",
+      "aliases": [
+        "코드커밋",
+        "코드 커밋"
+      ]
+    },
+    {
+      "id": "aws.amazon-cognito",
+      "term": "Amazon Cognito",
+      "aliases": [
+        "코그니토",
+        "코그니또"
+      ]
+    },
+    {
+      "id": "aws.aws-kms",
+      "term": "AWS KMS",
+      "aliases": [
+        "AWS 케이엠에스",
+        "아마존 케이엠에스"
+      ]
+    },
+    {
+      "id": "aws.aws-secrets-manager",
+      "term": "AWS Secrets Manager",
+      "aliases": [
+        "시크릿매니저",
+        "시크릿 매니저",
+        "시크릿츠 매니저"
+      ]
+    },
+    {
+      "id": "aws.aws-systems-manager",
+      "term": "AWS Systems Manager",
+      "aliases": [
+        "AWS 시스템즈 매니저",
+        "AWS 시스템 매니저"
+      ]
+    },
+    {
+      "id": "aws.aws-iam-identity-center",
+      "term": "AWS IAM Identity Center",
+      "aliases": [
+        "아이엠 아이덴티티 센터",
+        "IAM 아이덴티티 센터"
+      ]
+    },
+    {
+      "id": "aws.aws-organizations",
+      "term": "AWS Organizations",
+      "aliases": [
+        "AWS 오거나이제이션",
+        "AWS 오거니제이션즈"
+      ]
+    },
+    {
+      "id": "aws.aws-control-tower",
+      "term": "AWS Control Tower",
+      "aliases": [
+        "AWS 컨트롤타워",
+        "AWS 컨트롤 타워"
+      ]
+    },
+    {
+      "id": "aws.amazon-guardduty",
+      "term": "Amazon GuardDuty",
+      "aliases": [
+        "가드듀티",
+        "가드 듀티"
+      ]
+    },
+    {
+      "id": "aws.aws-security-hub",
+      "term": "AWS Security Hub",
+      "aliases": [
+        "AWS 시큐리티 허브"
+      ]
+    },
+    {
+      "id": "aws.amazon-inspector",
+      "term": "Amazon Inspector",
+      "aliases": [
+        "아마존 인스펙터"
+      ]
+    },
+    {
+      "id": "aws.amazon-macie",
+      "term": "Amazon Macie",
+      "aliases": [
+        "아마존 메이시"
+      ]
+    },
+    {
+      "id": "aws.aws-waf",
+      "term": "AWS WAF",
+      "aliases": [
+        "AWS 와프",
+        "아마존 와프"
+      ]
+    },
+    {
+      "id": "aws.aws-shield",
+      "term": "AWS Shield",
+      "aliases": [
+        "AWS 쉴드",
+        "AWS 실드"
+      ]
+    },
+    {
+      "id": "aws.aws-privatelink",
+      "term": "AWS PrivateLink",
+      "aliases": [
+        "프라이빗링크",
+        "프라이빗 링크"
+      ]
+    },
+    {
+      "id": "aws.aws-direct-connect",
+      "term": "AWS Direct Connect",
+      "aliases": [
+        "다이렉트커넥트",
+        "다이렉트 커넥트"
+      ]
+    },
+    {
+      "id": "aws.aws-transit-gateway",
+      "term": "AWS Transit Gateway",
+      "aliases": [
+        "트랜짓게이트웨이",
+        "트랜짓 게이트웨이"
+      ]
+    },
+    {
+      "id": "aws.amazon-ebs",
+      "term": "Amazon EBS",
+      "aliases": [
+        "아마존 이비에스",
+        "아마존 이 비 에스"
+      ]
+    },
+    {
+      "id": "aws.amazon-efs",
+      "term": "Amazon EFS",
+      "aliases": [
+        "아마존 이에프에스",
+        "아마존 이 에프 에스"
+      ]
+    },
+    {
+      "id": "aws.amazon-fsx",
+      "term": "Amazon FSx",
+      "aliases": [
+        "아마존 에프에스엑스"
+      ]
+    },
+    {
+      "id": "aws.aws-backup",
+      "term": "AWS Backup",
+      "aliases": [
+        "AWS 백업"
+      ]
+    },
+    {
+      "id": "aws.aws-dms",
+      "term": "AWS DMS",
+      "aliases": [
+        "AWS 디엠에스",
+        "아마존 디엠에스"
+      ]
+    },
+    {
+      "id": "aws.aws-datasync",
+      "term": "AWS DataSync",
+      "aliases": [
+        "AWS 데이터싱크",
+        "AWS 데이터 싱크"
+      ]
+    },
+    {
+      "id": "aws.aws-transfer-family",
+      "term": "AWS Transfer Family",
+      "aliases": [
+        "트랜스퍼 패밀리"
+      ]
+    },
+    {
+      "id": "aws.amazon-s3-glacier",
+      "term": "Amazon S3 Glacier",
+      "aliases": [
+        "에스쓰리 글래시어",
+        "S3 글래시어",
+        "S3 글레이셔"
+      ]
+    },
+    {
+      "id": "aws.amazon-s3-intelligent-tiering",
+      "term": "Amazon S3 Intelligent-Tiering",
+      "aliases": [
+        "에스쓰리 인텔리전트 티어링",
+        "S3 인텔리전트 티어링"
+      ]
+    },
+    {
+      "id": "aws.amazon-transcribe",
+      "term": "Amazon Transcribe",
+      "aliases": [
+        "아마존 트랜스크라이브"
+      ]
+    },
+    {
+      "id": "aws.amazon-polly",
+      "term": "Amazon Polly",
+      "aliases": [
+        "아마존 폴리"
+      ]
+    },
+    {
+      "id": "aws.amazon-textract",
+      "term": "Amazon Textract",
+      "aliases": [
+        "아마존 텍스트랙트",
+        "아마존 텍스트렉트"
+      ]
+    },
+    {
+      "id": "aws.amazon-comprehend",
+      "term": "Amazon Comprehend",
+      "aliases": [
+        "아마존 컴프리헨드"
+      ]
+    },
+    {
+      "id": "aws.amazon-rekognition",
+      "term": "Amazon Rekognition",
+      "aliases": [
+        "아마존 레코그니션",
+        "아마존 리코그니션"
+      ]
+    },
+    {
+      "id": "aws.amazon-lex",
+      "term": "Amazon Lex",
+      "aliases": [
+        "아마존 렉스"
+      ]
+    },
+    {
+      "id": "aws.amazon-translate",
+      "term": "Amazon Translate",
+      "aliases": [
+        "아마존 트랜슬레이트"
+      ]
+    }
+  ]
+}

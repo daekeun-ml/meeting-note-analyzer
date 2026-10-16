@@ -1,3 +1,4 @@
+import { ProcessedMedia } from "../components/ProcessedMedia";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -82,6 +83,7 @@ export function InterviewPage() {
     {interview.status === "FAILED" && <Card className="mt-4 p-4"><p className="text-sm text-danger">{interview.error}</p><Button full className="mt-3" loading={retry.isPending} onClick={() => retry.mutate()}>완료된 단계부터 다시 시도</Button></Card>}
     {(error || start.error || retry.error || remove.error) && <InlineError>{error || start.error?.message || retry.error?.message || remove.error?.message}</InlineError>}
     {audioUrl && <div className="sticky top-0 z-10 -mx-4 px-4 py-3 mt-3 bg-bg/95 backdrop-blur"><AudioPlayer ref={player} src={audioUrl} onError={() => { void query.refetch().then(() => refreshAudio()); }} /></div>}
+    <ProcessedMedia result={query.data} refresh={async () => (await query.refetch({ throwOnError: true })).data} />
     {(doc || transcriptUrl) && <Segmented className="mt-3" value={tab} onChange={setTab} options={[...(doc ? [{ value: "notes" as const, label: "인터뷰 노트" }, { value: "assessment" as const, label: "AI 평가 의견" }] : []), ...(doc?.resume ? [{ value: "resume" as const, label: "이력서 대조" }] : []), ...(transcriptUrl ? [{ value: "transcript" as const, label: "전사" }] : [])]} />}
     {(doc || markdownUrl) && <div className="mt-4 space-y-3">
       {doc && <div><Button full loading={exporting === "simple"} disabled={exporting !== null} onClick={() => void download("simple")}>간소화 노트 다운로드 (.md)</Button><p className="mt-2 text-xs text-ink-3">주제별 질문·답변과 후속 질문을 읽기 쉽게 정리합니다. 이력서 대조와 평가는 제외합니다.</p></div>}
@@ -116,7 +118,7 @@ export function InterviewPage() {
         </Card></section>;
       })}
     </div>}
-    {transcriptUrl && (tab === "transcript" || !doc) && <div className="mt-4"><Transcript title={interview.title} transcriptUrl={transcriptUrl} audioUrl={null} speakerLabels={speakerLabels} speakerRoleLabels={speakerLabels} onSeek={(time) => player.current?.seek(time)} onRefreshUrls={async () => (await query.refetch({ throwOnError: true })).data} /></div>}
+    {transcriptUrl && (tab === "transcript" || !doc) && <div className="mt-4"><Transcript title={interview.title} transcriptUrl={transcriptUrl} originalTranscriptUrl={query.data.originalTranscriptUrl} audioUrl={null} speakerLabels={speakerLabels} speakerRoleLabels={speakerLabels} onSeek={(time) => player.current?.seek(time)} onRefreshUrls={async () => (await query.refetch({ throwOnError: true })).data} /></div>}
     {!active && ["FAILED", "COMPLETED"].includes(interview.status) && <div className="mt-6">
       {doc && JSON.stringify(doc.settings) !== JSON.stringify(interview.settings) && <p className="text-sm text-warning mb-3">설정이 변경되었습니다. 현재 노트와 의견은 이전 설정을 기준으로 작성되었습니다.</p>}
       {!editing ? <Button full variant="secondary" onClick={() => setEditing({ ...interview.settings, speakerRoles: { ...Object.fromEntries(speakers.map((speaker) => [speaker.id, speaker.role])), ...interview.settings.speakerRoles } })}>평가 항목·레벨·화자 역할 수정</Button>

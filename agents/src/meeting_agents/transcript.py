@@ -39,7 +39,8 @@ class Transcript:
         label = seg.get("speakerLabel", seg["speaker"])
         speaker = seg["speaker"] if label == seg["speaker"] else f"{seg['speaker']} ({label})"
         review = " [speaker review required]" if seg.get("speakerReviewRequired") else ""
-        return f"[{hms(seg['start'])}] {speaker}{review} ({seg['id']}): {seg['text']}"
+        original = f" [STT before term correction: {seg['originalText']}]" if seg.get("originalText") else ""
+        return f"[{hms(seg['start'])}] {speaker}{review} ({seg['id']}): {seg['text']}{original}"
 
     def window(self, start_sec: float, end_sec: float) -> list[dict[str, Any]]:
         return [s for s in self.segments if s["end"] >= start_sec and s["start"] <= end_sec]
@@ -53,8 +54,11 @@ class Transcript:
         """Split by wall-clock windows; returns (index, start, end, segments)."""
         size = minutes * 60
         out = []
-        idx, start = 1, 0.0
+        scope = (self.data.get("processing") or {}).get("scope") or {}
+        idx, start = 1, float(scope.get("startSec", 0))
         total = max(self.duration, self.segments[-1]["end"] if self.segments else 0.0)
+        if scope.get("status") == "applied":
+            total = min(total, float(scope["endSec"]))
         while start < total or idx == 1:
             end = start + size
             segs = [s for s in self.segments if s["start"] >= start and s["start"] < end]

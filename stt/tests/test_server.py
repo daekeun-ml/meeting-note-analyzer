@@ -47,7 +47,7 @@ def test_invocations_end_to_end_with_fake_engine(monkeypatch, tmp_path):
     server.set_engine(engine)
     with TestClient(server.app) as c:
         assert c.get("/ping").status_code == 200
-        r = c.post("/invocations", json={"meetingId": "m1", "audio_s3_uri": "s3://b/k.mp3"})
+        r = c.post("/invocations", json={"meetingId": "m1", "audio_s3_uri": "s3://b/k.mp3", "processing": {"denoise": False, "trim": False, "terminology": False}})
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["version"] == 1 and body["segments"][0]["text"] == "hello world"

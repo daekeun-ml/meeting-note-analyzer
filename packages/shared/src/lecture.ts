@@ -2,6 +2,7 @@ import { z } from "zod";
 import { CONSTRAINTS, OUTPUT_LANGUAGES, type OutputLanguage } from "./constants.js";
 import type { UploadPartTarget } from "./meeting.js";
 import { lecturePreferencesSchema, type LecturePreferences } from "./lecture-preferences.js";
+import { audioProcessingOptionsSchema, type AudioProcessingOptions, type AudioProcessingReport, type ProcessedMediaLinks } from "./audio-processing.js";
 
 export const LECTURE_LIMITS = { maxVideoBytes: 4 * 1024 ** 3, maxAudioBytes: CONSTRAINTS.maxUploadBytes, maxSlidesBytes: 100 * 1024 * 1024, maxPages: 120, maxVideoScenes: 240, maxResultPages: 360, maxActive: 3, uploadExpirySec: 4 * 3600, maxCustomPromptChars: 2000 } as const;
 export const SLIDE_TYPES = { pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation", pdf: "application/pdf" } as const;
@@ -39,6 +40,7 @@ export const createLectureSchema = z.object({
   customPrompt: z.string().trim().max(LECTURE_LIMITS.maxCustomPromptChars, "추가 요청은 2,000자 이하로 입력하세요").default(""),
   slideRange: slideRangeSchema,
   preferences: lecturePreferencesSchema.optional(),
+  audioProcessing: audioProcessingOptionsSchema.optional(),
   outputLanguage: z.enum(OUTPUT_LANGUAGES).default("ko"),
   languageHint: z.enum(["ko", "en", "ja", "zh", "auto"]).default("auto"),
   video: file.extend({ fileSize: z.number().int().positive().max(LECTURE_LIMITS.maxVideoBytes), contentType: z.literal("video/mp4") })
@@ -56,6 +58,9 @@ export interface LectureRecord {
   lectureId: string; owner: string; title: string; course: string;
   customPrompt?: string;
   preferences?: LecturePreferences;
+  audioProcessing?: AudioProcessingOptions;
+  processing?: AudioProcessingReport;
+  originalTranscriptKey?: string;
   slideRange?: string;
   selectedPages?: number[];
   originalPageCount?: number;
@@ -135,9 +140,10 @@ export interface LectureDocument {
   /** Counts for this analysis attempt; token counts include acknowledged model responses only. */
   usage?: Record<string, number>;
 }
-export interface LectureResultResponse {
+export interface LectureResultResponse extends ProcessedMediaLinks {
   lecture: LectureDto; document: LectureDocument | null; audioUrl: string | null; videoUrl?: string | null; slidesUrl: string | null;
   transcriptUrl?: string | null;
+  originalTranscriptUrl?: string | null;
   markdownUrl: string | null; flashcardsUrl: string | null; pageImages: { page: number; sourcePage?: number; url: string }[];
 }
 /** HTTP API response: large study documents bypass Lambda/API Gateway payload limits. */

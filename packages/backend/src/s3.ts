@@ -67,8 +67,12 @@ export async function abortMultipartUpload(key: string, uploadId: string): Promi
   }
 }
 
-export async function presignDownload(key: string, expiresIn = 3600): Promise<string> {
-  return getSignedUrl(s3, new GetObjectCommand({ Bucket: env.dataBucket, Key: key }), { expiresIn });
+export async function presignDownload(key: string, expiresIn = 3600, filename?: string): Promise<string> {
+  const safeName = filename ? Array.from(filename.replace(/[<>:"/\\|?*\u0000-\u001f\u007f]/g, "_")).slice(0, 200).join("") : undefined;
+  const encoded = safeName ? encodeURIComponent(safeName).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`) : undefined;
+  return getSignedUrl(s3, new GetObjectCommand({ Bucket: env.dataBucket, Key: key,
+    ...(encoded ? { ResponseContentDisposition: `attachment; filename*=UTF-8''${encoded}` } : {}),
+  }), { expiresIn });
 }
 
 /** Missing objects are a supported fallback. Permission and service failures must surface. */

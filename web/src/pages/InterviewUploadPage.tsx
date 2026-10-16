@@ -1,3 +1,5 @@
+import { DEFAULT_AUDIO_PROCESSING } from "@meeting-notes/shared";
+import { AudioProcessingSettings } from "../components/AudioProcessingSettings";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -12,6 +14,7 @@ export function InterviewUploadForm() {
   const api = useApi(); const nav = useNavigate(); const qc = useQueryClient();
   const [file, setFile] = useState<File | null>(null); const [title, setTitle] = useState("");
   const [resume, setResume] = useState<File | null>(null); const [badResume, setBadResume] = useState(false);
+  const [audioProcessing, setAudioProcessing] = useState(DEFAULT_AUDIO_PROCESSING);
   const [settings, setSettings] = useState(DEFAULT_INTERVIEW_SETTINGS); const [languageHint, setLanguageHint] = useState("auto");
   const [plan, setPlan] = useState<CreateInterviewResponse | null>(null);
   const [parts, setParts] = useState<Partial<Record<"audio" | "resume", UploadedPart[]>>>({});
@@ -21,7 +24,7 @@ export function InterviewUploadForm() {
     if (!file || badResume) return;
     setBusy(true); setError("");
     try {
-      const input = createInterviewSchema.parse({ title, languageHint, settings, audio: { fileName: file.name, fileSize: file.size, contentType: "audio/mpeg" },
+      const input = createInterviewSchema.parse({ title, languageHint, settings, audioProcessing, audio: { fileName: file.name, fileSize: file.size, contentType: "audio/mpeg" },
         resume: resume ? { fileName: resume.name, fileSize: resume.size, contentType: "application/pdf" } : undefined });
       const created = plan ?? await api.createInterview(input); setPlan(created);
       for (const asset of ["resume", "audio"] as const) {
@@ -53,6 +56,7 @@ export function InterviewUploadForm() {
         <p className="mt-3 text-xs text-ink-3 leading-relaxed">이력서는 질문과 답변을 이해하는 배경으로 사용합니다. 확인된 역량 격차는 평가 근거에 반영하며, 질문하지 않은 내용은 미검증으로 남깁니다.</p>
         {(resume || badResume) && <Button size="sm" variant="ghost" className="mt-2" onClick={() => { setResume(null); setBadResume(false); setError(""); }}>이력서 첨부 취소</Button>}
       </div>
+      <AudioProcessingSettings value={audioProcessing} onChange={setAudioProcessing} disabled={busy || !!plan} />
       <label className="block"><SectionLabel>인터뷰 제목</SectionLabel><input aria-label="인터뷰 제목" className={interviewInputClass} maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: ML 엔지니어 기술 인터뷰" /></label>
       <label className="block"><SectionLabel>녹음에서 사용하는 언어</SectionLabel><select aria-label="인터뷰 녹음 언어" className={interviewInputClass} value={languageHint} onChange={(e) => setLanguageHint(e.target.value)}><option value="auto">자동 감지</option><option value="ko">한국어</option><option value="en">English</option><option value="ja">日本語</option><option value="zh">中文</option></select></label>
       <InterviewSettingsForm value={settings} onChange={setSettings} />

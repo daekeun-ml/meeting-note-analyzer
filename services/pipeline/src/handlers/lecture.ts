@@ -4,7 +4,7 @@ import { SFNClient, SendTaskSuccessCommand } from "@aws-sdk/client-sfn";
 import { deletePrefix, env, getLecture, lectureKbMetadata, notifyUser, readJson, releaseLectureSlot, requireEnv, s3, updateLectureRun } from "@meeting-notes/backend";
 import { lectureKeys, lectureUploadsComplete, sttOutputSchema, type Transcript, type LectureRecord } from "@meeting-notes/shared";
 import { handler as startStt } from "./start-transcription.js";
-import { normalize } from "./normalize-transcript.js";
+import { normalize, persistTranscripts } from "./normalize-transcript.js";
 import { parseS3Uri } from "../lib/s3-uri.js";
 
 interface Input { op: "register" | "prepare" | "transcribe" | "normalize" | "analyze" | "complete" | "failed"; lectureId: string; runId: string; taskToken?: string; attempt?: number; stt?: { skipped?: boolean; silent?: boolean; outputLocation?: string }; result?: { documentKey: string; markdownKey: string; flashcardsKey: string; researchFailures: number; pageCount: number; selectedPages?: number[]; originalPageCount?: number; studyImages?: LectureRecord["studyImages"] }; error?: unknown }
@@ -37,7 +37,9 @@ export const handler = async (input: Input) => {
       }
       const audioKey = rec.preparedAudioKey ?? rec.assets.audio?.key;
       if (!audioKey) throw new Error("Prepared lecture audio is missing");
-      return startStt({ kind: "lecture", taskToken: input.taskToken, meetingId: input.lectureId, ownerSub: rec.owner, audioKey, languageHint: rec.languageHint, resume: !!transcriptKey, transcriptKey });
+      return startStt({ kind: "lecture", taskToken: input.taskToken, meetingId: input.lectureId, ownerSub: rec.owner, audioKey, languageHint: rec.languageHint, resume: !!transcriptKey, transcriptKey,
+        videoKey: rec.assets.video?.key, title: rec.title, context: rec.course, audioProcessing: rec.audioProcessing,
+        scopeModel: rec.preferences?.model === "sonnet" ? "sonnet" : "opus" });
     }
     case "normalize": {
       if (input.stt?.skipped && rec.transcriptKey) { await update({ status: "ANALYZING" }); return { transcriptKey: rec.transcriptKey }; }
@@ -53,8 +55,9 @@ export const handler = async (input: Input) => {
       }
       if (!transcript.segments.length && !rec.assets.video) throw new Error("No speech was found in the lecture recording");
       const key = `${lectureKeys.resultPrefix(input.lectureId)}transcript.json`;
-      await s3.send(new PutObjectCommand({ Bucket: env.dataBucket, Key: key, Body: JSON.stringify(transcript), ContentType: "application/json" }));
-      await update({ transcriptKey: key, durationSec: rec.durationSec ?? transcript.durationSec, status: "ANALYZING", stages: { ...rec.stages, stt: { status: "COMPLETED" } } });
+      const saved = await persistTranscripts(transcript, key, "lecture", input.lectureId);
+      await update({ transcriptKey: key, originalTranscriptKey: saved.originalTranscriptKey, processing: saved.processing,
+        durationSec: rec.durationSec ?? transcript.durationSec, status: "ANALYZING", stages: { ...rec.stages, stt: { status: "COMPLETED" } } });
       return { transcriptKey: key };
     }
     case "prepare":
