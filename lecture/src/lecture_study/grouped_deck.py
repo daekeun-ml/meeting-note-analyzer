@@ -47,25 +47,19 @@ def analyze_deck(store, workdir: Path, check, model, search, record, transcript,
             return store.cached(f"{cache_prefix}-{name}", build)
     audience = learner_profile(ScopedAudienceStore(), model, language, record, group_readings, segments)
     context = deck_context(record, slides, readings)
-    mapping = {p: i + 1 for i, g in enumerate(plan.groups) for p in g.pages}
     alignments = []
     for i, batch in enumerate(batches):
         check()
         def align(i=i, batch=batch):
-            # Previously validated page links can be regrouped without another model call.
-            old = store.read(store.prefix + f"cache/v2/alignment-{i}.json") if not record["assets"].get("video") else None
-            if old is not None:
-                old = Alignment.model_validate(old)
-                validate_alignment(old, batch, total)
-                proposal = Alignment(assignments=[m.model_copy(update={"page": mapping[m.page]}) for m in old.assignments if m.page in mapping])
-            else:
-                proposal = model.generate(Alignment,
-                    "Link recording segments ONLY to the supplied selected topic groups. The assignment page is the "
-                    "group ID, not a physical slide number. Use exact segment IDs and specific conceptual evidence, "
-                    "never proportional timing or slide order. Ranges must not overlap. Leave speech about excluded "
-                    "slides or unrelated topics unassigned. Reasons must be concise and in the output language.",
-                    {"outputLanguage": language, "groups": group_readings, "segments": batch},
-                    validate=lambda value: validate_alignment_sources(value, batch, len(plan.groups)))
+            # Legacy per-slide links were generated without the current model policy.
+            # Only reuse the group alignment through the model-scoped cache above.
+            proposal = model.generate(Alignment,
+                "Link recording segments ONLY to the supplied selected topic groups. The assignment page is the "
+                "group ID, not a physical slide number. Use exact segment IDs and specific conceptual evidence, "
+                "never proportional timing or slide order. Ranges must not overlap. Leave speech about excluded "
+                "slides or unrelated topics unassigned. Reasons must be concise and in the output language.",
+                {"outputLanguage": language, "groups": group_readings, "segments": batch},
+                validate=lambda value: validate_alignment_sources(value, batch, len(plan.groups)))
             return resolve_alignment(model, proposal, batch, group_readings, language).model_dump()
         value = Alignment.model_validate(store.cached(f"{cache_prefix}-alignment-{i}.json", align))
         validate_alignment(value, batch, len(plan.groups))

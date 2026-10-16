@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { formatSlidePages, type LectureDocument, type LecturePage } from "@meeting-notes/shared";
-import { MathText } from "./MathText";
+import { LectureText, MathText } from "./MathText";
 import { LectureMathNotes } from "./LectureMathNotes";
 import { Button, InlineError } from "./ui";
 import { hms } from "./AudioPlayer";
@@ -37,7 +37,7 @@ export function LecturePrint({ document: doc }: { document: LectureDocument }) {
   </article>, window.document.body);
 }
 
-function Text({ text }: { text: string }) { return <p className="whitespace-pre-wrap"><MathText text={text} /></p>; }
+function Text({ text }: { text: string }) { return <LectureText text={text} />; }
 function List({ items, ordered }: { items: string[]; ordered?: boolean }) {
   const Tag = ordered ? "ol" : "ul";
   return <Tag>{items.map((item, i) => <li key={i}><MathText text={item} /></li>)}</Tag>;

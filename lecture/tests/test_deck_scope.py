@@ -78,7 +78,8 @@ def test_only_selected_slides_reach_models_and_study_is_generated_per_group(tmp_
                 self.calls.append(schema)
                 return value
             if schema is Alignment:
-                pytest.fail("Validated old slide links should be reused")
+                # Old Sonnet links must not bypass alignment under the new model policy.
+                assert data["groups"][0]["sourcePages"] in ([3, 4], [5, 6])
             if schema is Study:
                 assert len(kwargs["images"]) == 2
             return super().generate(schema, task, data, **kwargs)
@@ -90,6 +91,7 @@ def test_only_selected_slides_reach_models_and_study_is_generated_per_group(tmp_
     assert doc["selectedPages"] == [3, 4, 5, 6] and doc["originalPageCount"] == 8
     assert [p["sourcePages"] for p in doc["pages"]] == [[3, 4], [5, 6]]
     assert model.calls.count(SlideReading) == 4 and model.calls.count(Study) == 2
+    assert model.calls.count(Alignment) == 1
     assert sorted(p.name for p in (work / "rendered").glob("*.png")) == ["3.png", "4.png", "5.png", "6.png"]
     assert {i["sourcePage"] for i in result["studyImages"]} == {3, 4, 5, 6}
     assert all(i["key"].startswith(store.prefix + "runs/run-1/") for i in result["studyImages"])

@@ -43,7 +43,22 @@ Theory explanations start with the idea in plain language, its purpose, and the 
 
 The model checks sign conventions, derivatives, dimensions, and assumptions against that context. A demonstrated inconsistency is shown as **원본 오류 수정**, with the original and corrected formulas kept separately; incomplete or ambiguous evidence is shown as **원본 확인 필요**. This is model-assisted review, not formal mathematical verification.
 
-Existing documents stay readable. **학습 설명 업데이트** reruns a completed lecture with the current study prompt, reusing its transcription, slide readings, and successful research. Prompt version changes invalidate both attached-slide and video-topic study caches. Model calls during regeneration may incur costs.
+Existing documents stay readable. **학습 설명 업데이트** reruns a completed lecture with the current study prompt, reusing its transcription and compatible analysis caches. Prompt version changes invalidate both attached-slide and video-topic study caches. Model-policy or profile changes invalidate model-derived caches while retaining the prepared media and transcription. Model calls during regeneration may incur costs.
+
+Long descriptions render as separate paragraphs in the owner, guest, and PDF views. Existing escaped paragraph breaks and quotes are repaired for display. Inline and display formulas support both dollar and backslash delimiters; the renderer preserves LaTeX commands and code examples. A narrow repair also recognizes unmarked LaTeX equations immediately followed by Korean prose. New outputs are normalized before validation and saving, and damaged generated text containing replacement characters is sent back for correction. Missing source characters are not reconstructed by the renderer.
+
+## Model selection
+
+Lecture analysis uses the configured Opus profile for reasoning and Sonnet for bounded extraction and selection:
+
+| Model | Tasks |
+| --- | --- |
+| Opus (`LECTURE_MODEL`) | Learning-group and topic planning, audience inference, semantic speech alignment and conflict resolution, explanations and mathematical checks, questions and flashcards, overall summary and review plan |
+| Sonnet (`LECTURE_FAST_MODEL`) | Page-range extraction, slide readings, video-frame observations and visual matching, selection of papers from search results |
+
+The CDK runtime sets these from `opusModel` and `sonnetModel`. Both models share one per-attempt call budget, including retries, and one token counter. Concurrent calls retain their selected model through service retries and output repair; they do not switch models on failure. Interview analysis continues to use its explicit `INTERVIEW_MODEL`.
+
+The previous implementation sent every lecture task to Sonnet. Using Opus for synthesis is a quality-oriented configuration choice, not a measured accuracy claim. It can increase cost and processing time. The first reanalysis under the new policy regenerates model-derived results rather than reusing the old Sonnet summaries and alignments.
 
 ## PDF and access
 

@@ -6,6 +6,7 @@ cdk-outputs*.json
 deploy.local.json
 deploy.local.*
 .deployment/
+/briefing/
 web/public/config.json
 .aws/
 .ssh/

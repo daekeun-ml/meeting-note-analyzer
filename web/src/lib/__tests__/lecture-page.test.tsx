@@ -92,6 +92,26 @@ it("shows study exports, unmatched speech and search failures without fabricated
   expect(question.open).toBe(false);
   expect(question.textContent).toContain("최적점을 지나칠 수 있습니다");
 });
+
+it("renders legacy overview paragraphs and formulas in goals, review steps, and the PDF", async () => {
+  const result = fixture();
+  result.document!.overview = String.raw`첫 문단은 \"Language Model\"을 설명합니다.\n\n다음 문단은 \\arg\\max_\\theta \\sum_t x_t으로 학습 목적을 제시합니다.`;
+  result.document!.learningObjectives = [String.raw`기울기 \(\nabla f(x)\)를 이해하기`];
+  result.document!.reviewPlan = [String.raw`확률 $P(w_t)$를 복습하기`];
+  api.lectureResult.mockResolvedValue(result);
+  await act(async () => { client.setQueryData(["lecture", "test"], result); await new Promise((resolve) => setTimeout(resolve, 10)); });
+  expect([...element.querySelectorAll("p")].some((p) => p.textContent === '첫 문단은 "Language Model"을 설명합니다.')).toBe(true);
+  expect(element.querySelectorAll(".katex")).toHaveLength(3);
+  expect(element.querySelector(".katex-error")).toBeNull();
+  const print = vi.spyOn(window, "print").mockImplementation(() => {});
+  await act(async () => button("PDF로 저장").click());
+  const printable = document.querySelector(".lecture-print")!;
+  expect([...printable.querySelectorAll("p")].some((p) => p.textContent === '첫 문단은 "Language Model"을 설명합니다.')).toBe(true);
+  expect(printable.querySelector(".katex-error")).toBeNull();
+  expect(printable.textContent).not.toContain(String.raw`\n\n`);
+  await act(async () => window.dispatchEvent(new Event("afterprint")));
+  print.mockRestore();
+});
 it("shows the request that was applied to the document as optional plain text", async () => {
   expect([...element.querySelectorAll("summary")].some((s) => s.textContent === "추가 요청")).toBe(false);
   const result = fixture();

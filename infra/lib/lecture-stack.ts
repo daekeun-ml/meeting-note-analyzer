@@ -81,7 +81,7 @@ export class LectureStack extends Stack {
     const runtime = new agentcore.CfnRuntime(this, "Runtime", {
       agentRuntimeName: `${config.projectName.replace(/-/g, "_")}_lecture_study`, agentRuntimeArtifact: { containerConfiguration: { containerUri: image.imageUri } }, roleArn: runtimeRole.roleArn,
       protocolConfiguration: "HTTP", networkConfiguration: { networkMode: "PUBLIC" },
-      environmentVariables: { AWS_REGION: this.region, DATA_BUCKET: dataBucket.bucketName, LECTURE_TABLE_NAME: table.tableName, INTERVIEW_TABLE_NAME: interviewTable.tableName, INTERVIEW_MODEL: config.opusModel, LECTURE_MODEL: config.sonnetModel, LECTURE_SEARCH_GATEWAY_URL: gateway.attrGatewayUrl, LECTURE_MAX_MODEL_CALLS: modelCallLimit, LECTURE_MAX_SEARCH_CALLS: searchCallLimit },
+      environmentVariables: { AWS_REGION: this.region, DATA_BUCKET: dataBucket.bucketName, LECTURE_TABLE_NAME: table.tableName, INTERVIEW_TABLE_NAME: interviewTable.tableName, INTERVIEW_MODEL: config.opusModel, LECTURE_MODEL: config.opusModel, LECTURE_FAST_MODEL: config.sonnetModel, LECTURE_SEARCH_GATEWAY_URL: gateway.attrGatewayUrl, LECTURE_MAX_MODEL_CALLS: modelCallLimit, LECTURE_MAX_SEARCH_CALLS: searchCallLimit },
       lifecycleConfiguration: { idleRuntimeSessionTimeout: 900, maxLifetime: 28800 },
     });
     retainRuntimeLogs(this, "RuntimeLogRetention", runtime.attrAgentRuntimeId);

@@ -4,6 +4,7 @@ from pathlib import Path
 from .customization import custom_prompt, request_cache_key, request_context, request_task
 from .export import flashcard_csv, markdown
 from .model import Model
+from .lecture_model import AnalysisCache, LectureModel
 from .parallel import parallel_map
 from .prompts import AUDIENCE_TASK
 from .schemas import Audience, Overview, Papers
@@ -50,7 +51,9 @@ def research_page(model: Model, search: GatewaySearch, page: dict, max_queries: 
 def analyze(store, workdir: Path, check, model=None, search=None, render=render_deck):
     record = store.record()
     custom_prompt(record)  # Validate optional preferences before making model calls.
-    model = model or Model(check=check)
+    model = model or LectureModel(check=check)
+    if namespace := getattr(model, "cache_namespace", None):
+        store = AnalysisCache(store, namespace)
     search = search or GatewaySearch()
     if record["assets"].get("video") and not record["assets"].get("slides"):
         from .video_analysis import analyze_video
@@ -118,7 +121,7 @@ def finish_lecture(store, model, search, check, record, language, pages, duratio
         del page["searchQueries"]
         del page["outputLanguage"]
     def overview_task():
-        task = "Summarize this lecture and propose a practical ordered review plan with learning objectives. Use only the provided summaries for lecture claims. Study recommendations are suggestions; never predict exam questions. Use the output language."
+        task = "Summarize this lecture in 3–6 short paragraphs, each developing one main idea, and propose a practical ordered review plan with learning objectives. Separate paragraphs with actual blank lines. Use only the provided summaries for lecture claims. A selected page range limits this review; it does not prove other pages were not taught. Study recommendations are suggestions; never predict exam questions. Use the output language and delimit all formulas with $...$ or $$...$$."
         task = request_task(task, preferences)
         rows = [{"page": p["page"], "title": p["title"], "summary": p["slideSummary"][:650], "spoken": p["spokenSummary"][:300]} for p in pages]
         if preferences:
