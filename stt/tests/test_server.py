@@ -65,8 +65,8 @@ def test_invocations_rejects_too_long(monkeypatch):
         assert r.status_code == 400 and "too long" in r.json()["error"]
 
 
-@pytest.mark.parametrize("denoise_status", ["applied", "skipped", "failed"])
-def test_listening_filter_never_changes_asr_or_diarization_input(monkeypatch, denoise_status):
+@pytest.mark.parametrize("denoise_status", ["applied", "skipped", "failed", "disabled"])
+def test_asr_and_diarization_share_denoised_input_only_when_filtering_succeeds(monkeypatch, denoise_status):
     seen = {}
     class Transcriber(FakeTranscriber):
         def transcribe(self, wav, **kwargs):
@@ -84,6 +84,7 @@ def test_listening_filter_never_changes_asr_or_diarization_input(monkeypatch, de
         target.write_bytes(b"original")
         return target
     def denoise(source, target):
+        assert denoise_status != "disabled", "Disabled filtering must not run"
         if denoise_status == "failed":
             raise RuntimeError("Filter unavailable")
         target.write_bytes(b"filtered")
@@ -94,9 +95,11 @@ def test_listening_filter_never_changes_asr_or_diarization_input(monkeypatch, de
     monkeypatch.setattr("stt.inference.to_wav16k", normalize)
     monkeypatch.setattr("stt.inference.reduce_noise", denoise)
     monkeypatch.setattr("stt.inference.process_transcript", publish)
-    engine.process(SttRequest(meetingId="m", kind="meeting", audio_s3_uri="s3://b/m.mp3"))
-    assert seen == {"asr": b"original", "diarization": b"original", "noise": denoise_status,
-                    "media": b"filtered" if denoise_status == "applied" else b"original", "provenance": "original"}
+    engine.process(SttRequest(meetingId="m", kind="meeting", audio_s3_uri="s3://b/m.mp3",
+                              processing={"denoise": denoise_status != "disabled", "trim": False, "terminology": False}))
+    expected = b"filtered" if denoise_status == "applied" else b"original"
+    assert seen == {"asr": expected, "diarization": expected, "noise": denoise_status,
+                    "media": expected, "provenance": "denoised" if denoise_status == "applied" else "original"}
 
 
 def test_ping_answers_while_a_job_is_running():

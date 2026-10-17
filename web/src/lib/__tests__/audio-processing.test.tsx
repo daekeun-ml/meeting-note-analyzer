@@ -84,3 +84,13 @@ it("explains that new transcription uses the original recording", async () => {
   await act(async () => root.render(<ProcessedMedia result={{ processing }} refresh={async () => undefined} />));
   expect(element.textContent).toContain("전사와 화자 분리는 원본 음성을 기준으로 처리");
 });
+
+it("shows denoised recognition input without relabeling older or unknown inputs", async () => {
+  const processing = audioProcessingReportSchema.parse({ ...report(), transcriptionInput: "denoised" });
+  await act(async () => root.render(<ProcessedMedia result={{ processing }} refresh={async () => undefined} />));
+  expect(element.textContent).toContain("전사와 화자 분리에 잡음 감소된 음성을 사용했습니다.");
+  expect(element.textContent).not.toContain("원본 음성을 기준으로 처리");
+  delete processing.transcriptionInput;
+  await act(async () => root.render(<ProcessedMedia result={{ processing }} refresh={async () => undefined} />));
+  expect(element.textContent).not.toContain("전사와 화자 분리에 잡음 감소된 음성");
+});

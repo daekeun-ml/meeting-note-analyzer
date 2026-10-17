@@ -62,12 +62,16 @@ class Engine:
                 except Exception as error:
                     log.warning("Noise reduction failed; retaining normalized input: %s", type(error).__name__)
                     noise = {"status": "failed", "method": "fft", "reductionDb": 0}
+            # Share the full-length PCM input before scope trimming or MP3 export.
+            # Skipped, disabled or failed filtering retains the normalized original.
+            recognition_wav = media_wav if noise["status"] == "applied" else wav
+            transcription_input = "denoised" if recognition_wav != wav else "original"
             t1 = time.time()
-            tr = transcriber.transcribe(wav, language=req.language, mode=req.mode, hotwords=req.hotwords)
+            tr = transcriber.transcribe(recognition_wav, language=req.language, mode=req.mode, hotwords=req.hotwords)
             t2 = time.time()
             turns: list[Turn] = []
             if diarizer is not None and req.diarization.enabled and tr.words:
-                turns = diarizer.diarize(wav, min_speakers=req.diarization.min_speakers, max_speakers=req.diarization.max_speakers)
+                turns = diarizer.diarize(recognition_wav, min_speakers=req.diarization.min_speakers, max_speakers=req.diarization.max_speakers)
             t3 = time.time()
             raw = build_response(req, tr.words, tr.language, tr.language_probability, turns, duration, transcriber.name, {
                 "prepSec": round(t1 - t0, 2),
@@ -77,10 +81,8 @@ class Engine:
                 "turnCount": len(turns),
                 **({"speechModelRevisions": self.registry.provenance()} if self.registry else {}),
             })
-            # A cleaner listening copy is not evidence of better recognition.
-            # Keep ASR and speaker embeddings on the normalized original audio.
             return process_transcript(raw, req, media_wav, Path(tmp), self.s3, noise,
-                                      bitrate_kbps=mp3_export_bitrate(src), transcription_input="original")
+                                      bitrate_kbps=mp3_export_bitrate(src), transcription_input=transcription_input)
 
     def _download(self, uri: str, dst: Path) -> None:
         if not uri.startswith("s3://"):

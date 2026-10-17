@@ -59,7 +59,7 @@ def process_transcript(raw: SttResponse, request: SttRequest, wav: Path, workdir
     processing = {"version": 1, "kind": request.kind, "noise": noise, "scope": scope,
                   "terms": terms, "media": {}, "warnings": []}
     if transcription_input is not None:
-        if transcription_input != "original":
+        if transcription_input not in ("original", "denoised"):
             raise ValueError("Unsupported transcription input")
         processing["transcriptionInput"] = transcription_input
     prefix = f"{PREFIXES[request.kind]}/{request.meetingId}/processed/{uuid.uuid4().hex}/"
