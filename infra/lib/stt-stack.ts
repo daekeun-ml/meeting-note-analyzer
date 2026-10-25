@@ -75,6 +75,8 @@ export class SttStack extends Stack {
       const image = new ecr_assets.DockerImageAsset(this, "SttImage", {
         directory: repoPath("stt"),
         platform: ecr_assets.Platform.LINUX_AMD64,
+        // SageMaker rejects OCI indexes (including BuildKit's default provenance index).
+        outputs: ["type=docker"],
         exclude: ["tests", ".venv", "models", "__pycache__"],
       });
 
