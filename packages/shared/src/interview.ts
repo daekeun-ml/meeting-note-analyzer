@@ -88,7 +88,8 @@ export function toInterviewDto(record: InterviewRecord): InterviewDto {
 }
 export const completeInterviewUploadSchema = z.object({
   asset: z.enum(["audio", "resume"]).default("audio"), uploadId: z.string().min(1).max(1024),
-  parts: z.array(z.object({ partNumber: z.number().int().min(1).max(10000), etag: z.string().min(1).max(256) })).min(1).max(10000),
+  parts: z.array(z.object({ partNumber: z.number().int().min(1).max(10000), etag: z.string().min(1).max(256) }))
+    .min(1).max(Math.ceil(INTERVIEW_LIMITS.maxAudioBytes / CONSTRAINTS.uploadPartBytes)),
 });
 export type CompleteInterviewUpload = z.input<typeof completeInterviewUploadSchema>;
 export interface InterviewEvidence { segmentId: string; start: number; end: number; speaker: string; text: string }

@@ -6,20 +6,19 @@ Use GitHub's private vulnerability reporting for this repository when available.
 
 ## Known dependency advisories
 
-As of 2026-09-09, the repository has four open Dependabot alerts. This application synchronization does not change the dependency lockfiles or resolve those alerts.
+The 2026-10-25 security update upgrades Zod, Vitest, Vite, CDK and affected transitive JavaScript dependencies. `npm audit` reports no known vulnerabilities for the updated lockfile. Node 22.12+, 24.x or 26+ is required by the test toolchain.
 
-| Dependency | Manifest | Severity | Upstream reference |
-| --- | --- | --- | --- |
-| `lightning` | `stt/uv.lock` | High | [Checkpoint loading advisory](https://github.com/advisories/GHSA-qqmf-gpg7-g8gw) |
-| `accelerate` | `stt/uv.lock` | Moderate | [Sharded checkpoint issue](https://github.com/huggingface/accelerate/issues/4067) |
-| `vitest` | `package-lock.json` | Moderate | [Mock redirect advisory](https://github.com/vitest-dev/vitest/security/advisories/GHSA-82fw-gwwq-j7x9) |
-| `@vitest/mocker` | `package-lock.json` | Moderate | [Mock redirect advisory](https://github.com/vitest-dev/vitest/security/advisories/GHSA-82fw-gwwq-j7x9) |
+The Python lockfiles upgrade certifi, Pillow, PyJWT, urllib3, Lightning, Accelerate and other affected dependencies. Security minimum versions are constrained in each `pyproject.toml`; the pip-based STT image and model publisher also apply `security-constraints.txt`. Rebuild images to incorporate these updates. GPU dependency resolution was checked, but local CPU tests do not validate GPU inference.
 
-The Vitest advisory concerns development-server file access. Its listed fix is 4.1.11, which requires an upgrade from this project's 3.x test toolchain. The Accelerate alert currently lists no patched release. Track these dependency upgrades separately from application validation.
+One dependency advisory remains in the agents environment: [GHSA-xcq7-p3pf-p88h](https://github.com/advisories/GHSA-xcq7-p3pf-p88h), unbounded `tracestate` parsing in `opentelemetry-api` 1.44.0. Even `aws-opentelemetry-distro` 0.21.0 pins this version and prevents an ordinary upgrade to the patched API 1.45.1. `meeting_agents.telemetry_security` wraps the configured propagator before either runtime accepts traffic and drops combined incoming `tracestate` values over 512 characters or 32 header entries before the vulnerable parser. Valid trace context and the configured X-Ray/baggage propagation remain delegated. This is a runtime mitigation, not removal of the dependency advisory. Upgrade to a compatible AWS distro and remove the guard once available.
 
-Dependabot flags `lightning` 2.6.5 in `stt/uv.lock`, a transitive dependency of `pyannote.audio`, for [GHSA-qqmf-gpg7-g8gw / CVE-2026-58659](https://github.com/advisories/GHSA-qqmf-gpg7-g8gw). The advisory describes arbitrary code execution when loading a malicious model checkpoint.
+OSV queries of the three updated lockfiles found only that advisory on 2026-10-25. This is a source/lockfile assessment, not a scan of an already deployed container or its operating-system packages. Model checkpoint loading still requires trusted, reviewed artifacts.
 
-This alert remains open. Review the upstream fix and a compatible package release before deployment, and use only trusted model checkpoints. The advisory's patched-version metadata differs from its description, so an automated version substitution needs verification. Unit tests, image builds, and secret scans do not establish that the affected dependency is fixed.
+## Request and push limits
+
+JSON API requests are limited to 256 KiB before decoding/parsing. Validation errors include at most five entries, and multipart completion lists are limited to the application's actual upload sizes (32 audio parts or 256 video parts).
+
+Push subscriptions accept only HTTPS destinations at supported Google, Mozilla, Apple and Windows push hosts, without credentials, fragments or nonstandard ports. Keys have bounded base64url encodings. Stored subscriptions are revalidated before sending, so unsafe legacy destinations are removed without outbound requests. New registrations reserve one of 20 per-user slots transactionally; re-registration of an existing device does not consume another slot. Delivery reads at most 20 subscriptions, sends at most four concurrently and applies a five-second request timeout. Legacy users with more than 20 entries should remove unused subscriptions; only the first bounded page is used during migration and delivery.
 
 ## Authentication and access
 

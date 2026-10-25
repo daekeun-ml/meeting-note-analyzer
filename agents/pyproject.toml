@@ -27,3 +27,11 @@ packages = ["src/meeting_agents"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 asyncio_mode = "auto"
+
+[tool.uv]
+constraint-dependencies = [
+  "certifi>=2026.10.19", "urllib3>=2.8.0", "mcp>=2.2.0",
+  "PyJWT>=2.15.0",
+]
+# AWS distro pins opentelemetry-api 1.44.0. telemetry_security bounds inbound
+# tracestate until AWS releases a distro compatible with API >=1.45.1.

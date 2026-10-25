@@ -10,12 +10,12 @@
     "cdk": "cdk"
   },
   "dependencies": {
-    "aws-cdk-lib": "^2.268.0",
-    "constructs": "^10.4.2",
-    "@meeting-notes/shared": "*"
+    "@meeting-notes/shared": "*",
+    "aws-cdk-lib": "^2.274.0",
+    "constructs": "^10.4.2"
   },
   "devDependencies": {
-    "aws-cdk": "^2.1140.0",
+    "aws-cdk": "^2.1146.1",
     "esbuild": "^0.25.9",
     "tsx": "^4.20.5"
   }

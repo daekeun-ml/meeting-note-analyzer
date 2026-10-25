@@ -37,7 +37,7 @@ export const sttOutputSchema = z.object({
   model: z.string(),
   speakers: z.array(sttSpeakerSchema),
   segments: z.array(sttSegmentSchema),
-  stats: z.record(z.unknown()).default({}),
+  stats: z.record(z.string(), z.unknown()).default({}),
   originalSegments: z.array(sttSegmentSchema).optional(),
   processing: audioProcessingReportSchema.optional(),
   speechModels: speechModelsSchema.optional(),

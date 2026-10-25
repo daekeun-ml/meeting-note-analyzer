@@ -94,7 +94,8 @@ export interface LectureUploadPlan { uploadId: string; partSize: number; parts: 
 export interface CreateLectureResponse { lecture: LectureDto; uploads: { video?: LectureUploadPlan; audio?: LectureUploadPlan; slides?: LectureUploadPlan } }
 export const completeLectureUploadSchema = z.object({
   asset: z.enum(["video", "audio", "slides"]), uploadId: z.string().min(1).max(1024),
-  parts: z.array(z.object({ partNumber: z.number().int().min(1).max(10000), etag: z.string().min(1).max(256) })).min(1).max(10000),
+  parts: z.array(z.object({ partNumber: z.number().int().min(1).max(10000), etag: z.string().min(1).max(256) }))
+    .min(1).max(Math.ceil(LECTURE_LIMITS.maxVideoBytes / CONSTRAINTS.uploadPartBytes)),
 });
 export type CompleteLectureUpload = z.infer<typeof completeLectureUploadSchema>;
 export interface LectureEvidence { segmentId: string; start: number; end: number; text: string; speaker: string }

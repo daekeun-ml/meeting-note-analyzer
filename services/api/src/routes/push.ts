@@ -1,15 +1,11 @@
 import { z } from "zod";
 import type { PushSubscriptionRecord } from "@meeting-notes/shared";
-import { meetingKeys } from "@meeting-notes/shared";
-import { deletePushSubscription, putPushSubscription } from "@meeting-notes/backend";
-import type { Caller } from "../lib/http.js";
+import { meetingKeys, pushSubscriptionSchema } from "@meeting-notes/shared";
+import { deletePushSubscription, putPushSubscription, PushSubscriptionLimitError } from "@meeting-notes/backend";
+import { HttpError, type Caller } from "../lib/http.js";
 import { endpointHash } from "./meetings.js";
 
-export const subscriptionSchema = z.object({
-  endpoint: z.string().url().max(2048),
-  keys: z.object({ p256dh: z.string().min(1), auth: z.string().min(1) }),
-  userAgent: z.string().max(512).optional(),
-});
+export const subscriptionSchema = pushSubscriptionSchema;
 
 export async function subscribe(caller: Caller, input: z.infer<typeof subscriptionSchema>): Promise<void> {
   const rec: PushSubscriptionRecord = {
@@ -20,7 +16,11 @@ export async function subscribe(caller: Caller, input: z.infer<typeof subscripti
     userAgent: input.userAgent,
     createdAt: new Date().toISOString(),
   };
-  await putPushSubscription(rec);
+  try { await putPushSubscription(rec); }
+  catch (error) {
+    if (error instanceof PushSubscriptionLimitError) throw new HttpError(429, "알림 기기 등록 한도를 초과했습니다", "subscription_limit");
+    throw error;
+  }
 }
 
 export const unsubscribeSchema = z.object({ endpoint: z.string().url().max(2048) });

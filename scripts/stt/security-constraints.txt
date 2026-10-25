@@ -1,0 +1,7 @@
+# Model publisher security floors (the inference image uses stt/security-constraints.txt).
+certifi>=2026.10.19
+urllib3>=2.8.0
+accelerate>=1.15.0
+filelock>=4.2.1
+pillow>=13.0.0
+setuptools>=84.1.0

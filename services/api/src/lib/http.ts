@@ -32,17 +32,27 @@ export function json(status: number, body: unknown): APIGatewayProxyResultV2 {
   };
 }
 
-export function parseBody<S extends z.ZodTypeAny>(event: Pick<APIGatewayProxyEventV2WithJWTAuthorizer, "body" | "isBase64Encoded">, schema: S): z.output<S> {
+export const MAX_API_BODY_BYTES = 256 * 1024;
+const MAX_VALIDATION_ISSUES = 5;
+
+export function parseBody<S extends z.ZodType>(event: Pick<APIGatewayProxyEventV2WithJWTAuthorizer, "body" | "isBase64Encoded">, schema: S): z.output<S> {
+  const body = event.body ?? "";
+  // Bound the encoded representation before allocating a decoded buffer or parsing JSON.
+  const encodedLimit = event.isBase64Encoded ? 4 * Math.ceil(MAX_API_BODY_BYTES / 3) : MAX_API_BODY_BYTES;
+  if (Buffer.byteLength(body, "utf8") > encodedLimit) throw new HttpError(413, "request body too large", "payload_too_large");
+  const decoded = event.isBase64Encoded ? Buffer.from(body, "base64") : Buffer.from(body, "utf8");
+  if (decoded.byteLength > MAX_API_BODY_BYTES) throw new HttpError(413, "request body too large", "payload_too_large");
   let raw: unknown;
   try {
-    const text = event.isBase64Encoded && event.body ? Buffer.from(event.body, "base64").toString("utf8") : event.body;
+    const text = decoded.toString("utf8");
     raw = text ? JSON.parse(text) : {};
   } catch {
     throw new HttpError(400, "invalid JSON body", "bad_request");
   }
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
-    throw new HttpError(400, parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "), "validation");
+    throw new HttpError(400, parsed.error.issues.slice(0, MAX_VALIDATION_ISSUES)
+      .map((i) => `${i.path.join(".")}: ${i.message}`.slice(0, 200)).join("; "), "validation");
   }
   return parsed.data as z.output<S>;
 }

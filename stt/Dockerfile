@@ -12,6 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # plain venv + pip: the image is built under qemu on an arm64 workstation, where the uv binary segfaults.
+COPY security-constraints.txt /opt/security-constraints.txt
+ENV PIP_CONSTRAINT=/opt/security-constraints.txt
 RUN python3 -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir --upgrade pip wheel
 
 # torch stack first (cu126 wheels), then the rest; versions pinned for reproducibility.

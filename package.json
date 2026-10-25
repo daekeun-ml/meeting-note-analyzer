@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Meeting recording (mp3) analyzer: CrisperWhisper STT on SageMaker + Claude Agent SDK multi-agent on AgentCore, orchestrated by Step Functions, deployed with CDK.",
   "engines": {
-    "node": ">=22"
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
   },
   "workspaces": [
     "packages/shared",
@@ -44,7 +44,7 @@
   },
   "devDependencies": {
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4",
+    "vitest": "^5.0.5",
     "@types/node": "^22.18.0"
   }
 }

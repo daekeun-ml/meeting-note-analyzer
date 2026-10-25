@@ -5,10 +5,12 @@ import {
   GetCommand,
   PutCommand,
   QueryCommand,
+  TransactWriteCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import {
   ACTIVE_STATUSES,
+  PUSH_LIMITS,
   meetingKeys,
   type MeetingRecord,
   type MeetingStatus,
@@ -90,12 +92,55 @@ export async function setMeetingStatus(meetingId: string, status: MeetingStatus,
   );
 }
 
+const pushLimitKey = (owner: string) => ({ PK: `USER#${owner}`, SK: "PUSH_LIMIT" });
+export class PushSubscriptionLimitError extends Error {}
+
+async function ensurePushLimit(owner: string): Promise<void> {
+  const limitKey = pushLimitKey(owner);
+  const existing = await ddb.send(new GetCommand({ TableName: env.tableName, Key: limitKey, ConsistentRead: true }));
+  if (!existing.Item) {
+    // Adopt up to the limit of legacy records once. A conditional put makes concurrent
+    // initializations safe; later registrations update the set and record atomically.
+    const legacy = await listPushSubscriptions(owner);
+    const endpoints = new Set(legacy.map((item) => item.SK));
+    try {
+      await ddb.send(new PutCommand({ TableName: env.tableName,
+        Item: { ...limitKey, ...(endpoints.size ? { endpoints } : {}) },
+        ConditionExpression: "attribute_not_exists(PK)" }));
+    } catch (error) {
+      if ((error as Error).name !== "ConditionalCheckFailedException") throw error;
+    }
+  }
+}
+
 export async function putPushSubscription(rec: PushSubscriptionRecord): Promise<void> {
-  await ddb.send(new PutCommand({ TableName: env.tableName, Item: rec }));
+  await ensurePushLimit(rec.owner);
+  const limitKey = pushLimitKey(rec.owner);
+  try {
+    await ddb.send(new TransactWriteCommand({ TransactItems: [
+      { Update: { TableName: env.tableName, Key: limitKey,
+        UpdateExpression: "ADD endpoints :endpointSet",
+        ConditionExpression: "attribute_not_exists(endpoints) OR contains(endpoints, :endpoint) OR size(endpoints) < :max",
+        ExpressionAttributeValues: { ":endpointSet": new Set([rec.SK]), ":endpoint": rec.SK, ":max": PUSH_LIMITS.subscriptions } } },
+      { Put: { TableName: env.tableName, Item: rec } },
+    ] }));
+  } catch (error) {
+    const failure = error as { name?: string; CancellationReasons?: { Code?: string }[] };
+    if (failure.name === "TransactionCanceledException" && failure.CancellationReasons?.[0]?.Code === "ConditionalCheckFailed") {
+      throw new PushSubscriptionLimitError("Push subscription limit reached");
+    }
+    throw error;
+  }
 }
 
 export async function deletePushSubscription(ownerSub: string, endpointHash: string): Promise<void> {
-  await ddb.send(new DeleteCommand({ TableName: env.tableName, Key: meetingKeys.push(ownerSub, endpointHash) }));
+  await ensurePushLimit(ownerSub);
+  const key = meetingKeys.push(ownerSub, endpointHash);
+  await ddb.send(new TransactWriteCommand({ TransactItems: [
+    { Delete: { TableName: env.tableName, Key: key } },
+    { Update: { TableName: env.tableName, Key: pushLimitKey(ownerSub),
+      UpdateExpression: "DELETE endpoints :endpointSet", ExpressionAttributeValues: { ":endpointSet": new Set([key.SK]) } } },
+  ] }));
 }
 
 export async function listPushSubscriptions(ownerSub: string): Promise<PushSubscriptionRecord[]> {
@@ -104,6 +149,8 @@ export async function listPushSubscriptions(ownerSub: string): Promise<PushSubsc
       TableName: env.tableName,
       KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
       ExpressionAttributeValues: { ":pk": `USER#${ownerSub}`, ":sk": meetingKeys.pushPrefix },
+      Limit: PUSH_LIMITS.subscriptions,
+      ConsistentRead: true,
     }),
   );
   return (res.Items ?? []) as PushSubscriptionRecord[];

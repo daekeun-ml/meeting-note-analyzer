@@ -20,6 +20,10 @@ from typing import Any
 
 from opentelemetry import trace
 from opentelemetry.sdk.trace import SpanProcessor
+from . import telemetry_security
+
+# Runs in both main and chat entrypoints before either HTTP server accepts traffic.
+telemetry_security.install()
 
 log = logging.getLogger("agents.tracing")
 

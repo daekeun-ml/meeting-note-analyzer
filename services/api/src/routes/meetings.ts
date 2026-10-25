@@ -95,7 +95,8 @@ export async function createMeeting(caller: Caller, input: CreateMeetingInput): 
 
 export const completeUploadSchema = z.object({
   uploadId: z.string().min(1).max(1024),
-  parts: z.array(z.object({ partNumber: z.number().int().min(1).max(10000), etag: z.string().min(1).max(256) })).min(1).max(10000),
+  parts: z.array(z.object({ partNumber: z.number().int().min(1).max(10000), etag: z.string().min(1).max(256) }))
+    .min(1).max(Math.ceil(CONSTRAINTS.maxUploadBytes / CONSTRAINTS.uploadPartBytes)),
 });
 
 /** Finish the multipart upload; the S3 "Object Created" event then starts the pipeline for this meeting. */
