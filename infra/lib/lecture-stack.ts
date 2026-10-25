@@ -31,6 +31,7 @@ export class LectureStack extends Stack {
   readonly apiFunction: lambda.IFunction;
   readonly interviewApiFunction: lambda.IFunction;
   readonly guestApiFunction: lambda.IFunction;
+  readonly guestAuthorizerFunction: lambda.IFunction;
   /** Lecture metadata; the chat runtime reads it for list_lectures / get_lecture. */
   readonly table: ddb.ITable;
   constructor(scope: Construct, id: string, props: LectureStackProps) {
@@ -172,6 +173,11 @@ export class LectureStack extends Stack {
     guestApi.addToRolePolicy(new iam.PolicyStatement({ resources: [guestPool.attrArn],
       actions: ["cognito-idp:AdminCreateUser", "cognito-idp:AdminGetUser", "cognito-idp:AdminInitiateAuth", "cognito-idp:AdminRespondToAuthChallenge", "cognito-idp:DescribeUserPoolClient"] }));
     this.guestApiFunction = guestApi;
+    this.guestAuthorizerFunction = nodeFn(this, "GuestAuthorizer", {
+      entry: "services/api/src/handlers/guest-authorizer.ts",
+      environment: { GUEST_USER_POOL_ID: guestPool.ref, GUEST_USER_POOL_CLIENT_ID: guestClient.ref },
+      timeout: Duration.seconds(10), memorySize: 256,
+    });
     new CfnOutput(this, "GuestUserPoolId", { value: guestPool.ref });
     new CfnOutput(this, "GuestUserPoolClientId", { value: guestClient.ref });
     const interviews = new InterviewService(this, "Interviews", { config, dataBucket, table: interviewTable, pushTable: props.table,

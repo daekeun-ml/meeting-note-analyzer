@@ -1,6 +1,6 @@
 import { ArnFormat, CfnOutput, Duration, Stack, type StackProps } from "aws-cdk-lib";
 import * as apigw from "aws-cdk-lib/aws-apigatewayv2";
-import { HttpJwtAuthorizer } from "aws-cdk-lib/aws-apigatewayv2-authorizers";
+import { HttpJwtAuthorizer, HttpLambdaAuthorizer, HttpLambdaResponseType } from "aws-cdk-lib/aws-apigatewayv2-authorizers";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import type * as ddb from "aws-cdk-lib/aws-dynamodb";
 import type * as lambda from "aws-cdk-lib/aws-lambda";
@@ -26,6 +26,7 @@ export interface ApiStackProps extends StackProps {
   lectureApiFunction: lambda.IFunction;
   interviewApiFunction: lambda.IFunction;
   guestApiFunction: lambda.IFunction;
+  guestAuthorizerFunction: lambda.IFunction;
 }
 
 export class ApiStack extends Stack {
@@ -112,8 +113,17 @@ export class ApiStack extends Stack {
       ["/api/guest/lectures/{shareId}/verify-code", apigw.HttpMethod.POST],
       ["/api/guest/lectures/{shareId}", apigw.HttpMethod.GET],
       ["/api/guest/lectures/{shareId}/images/{imageId}", apigw.HttpMethod.GET],
-      ["/api/guest/logout", apigw.HttpMethod.POST],
     ] as const) this.httpApi.addRoutes({ path, methods: [method], integration: guestIntegration });
+    const guestAuthorizer = new HttpLambdaAuthorizer("GuestSession", props.guestAuthorizerFunction, {
+      identitySource: ["$request.header.Cookie"],
+      responseTypes: [HttpLambdaResponseType.SIMPLE],
+      // Recheck JWT expiry on every request, including logout after an idle tab.
+      resultsCacheTtl: Duration.seconds(0),
+    });
+    this.httpApi.addRoutes({
+      path: "/api/guest/logout", methods: [apigw.HttpMethod.POST],
+      integration: guestIntegration, authorizer: guestAuthorizer,
+    });
     const interviewIntegration = new HttpLambdaIntegration("InterviewIntegration", props.interviewApiFunction);
     const interviewRoutes: [string, apigw.HttpMethod[]][] = [
       ["/api/interviews", [apigw.HttpMethod.GET, apigw.HttpMethod.POST]],

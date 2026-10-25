@@ -27,6 +27,8 @@ The web app uses Cognito managed login with an authorization code flow and PKCE.
 
 Application API requests require a Cognito token. Meeting, lecture, and chat handlers check ownership. The browser uses time-limited signed URLs for files. Treat those URLs as temporary credentials while they are valid.
 
+Shared lectures use a separate Cognito Essentials pool with email OTP. `/api/guest/lectures/*` routes bypass the API Gateway authorizer and are verified by the guest Lambda. `POST /api/guest/logout` requires a Lambda authorizer at API Gateway that verifies the guest cookie's JWT signature, issuer, client audience, ID-token use, and expiry without caching authorization decisions. The logout handler also verifies the session before clearing the cookie.
+
 The default CloudFront hostname provides HTTPS. The site and data buckets block public access. API, upload, and chat routes use separate CloudFront behaviors so API errors are not rewritten as web pages.
 
 ## Deployment information

@@ -2,18 +2,17 @@ import { createHash, createHmac, randomUUID } from "node:crypto";
 import { GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { AdminCreateUserCommand, AdminGetUserCommand, AdminInitiateAuthCommand, AdminRespondToAuthChallengeCommand, CognitoIdentityProviderClient, DescribeUserPoolClientCommand } from "@aws-sdk/client-cognito-identity-provider";
-import { CognitoJwtVerifier } from "aws-jwt-verify";
 import { ddb, env, getLecture, lectureTable, readJson, s3 } from "@meeting-notes/backend";
 import { type GuestLectureResult, type LectureDocument } from "@meeting-notes/shared";
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
 import { z } from "zod";
 import { HttpError, parseBody } from "../lib/http.js";
+import { guestSession, verifyGuestToken } from "../lib/guest-session.js";
 import { getShare, type ShareRecord } from "../routes/lecture-sharing.js";
 
 const poolId = process.env["GUEST_USER_POOL_ID"] ?? "";
 const clientId = process.env["GUEST_USER_POOL_CLIENT_ID"] ?? "";
 const cognito = new CognitoIdentityProviderClient({});
-const verifier = CognitoJwtVerifier.create({ userPoolId: poolId, clientId, tokenUse: "id" });
 const emailSchema = z.object({ email: z.string().trim().toLowerCase().email().max(254) });
 // Cognito EMAIL_OTP uses eight characters; retain compatibility with six-character codes.
 // Forward the complete code unchanged and let Cognito verify it.
@@ -85,7 +84,7 @@ interface Challenge { shareId: string; email: string; username: string; session:
  * case require the current, enabled Cognito user to confirm the SAME subject
  * and email; never mark an address verified ourselves.
  */
-async function verifiedTokenEmail(claims: Awaited<ReturnType<typeof verifier.verify>>): Promise<string | null> {
+async function verifiedTokenEmail(claims: Awaited<ReturnType<typeof verifyGuestToken>>): Promise<string | null> {
   const email = typeof claims.email === "string" ? claims.email.trim().toLowerCase() : null;
   if (claims.email !== undefined && !email) return null;
   const flag: unknown = claims.email_verified;
@@ -131,7 +130,7 @@ async function verifyCode(event: APIGatewayProxyEventV2, shareId: string) {
     throw error;
   }
   if (!token) throw new HttpError(400, "인증을 완료하지 못했습니다", "invalid_code");
-  const claims = await verifier.verify(token);
+  const claims = await verifyGuestToken(token);
   const email = await verifiedTokenEmail(claims);
   if (!email || email !== challenge.email) {
     console.warn("guest email verification mismatch", { emailPresent: typeof claims.email === "string",
@@ -145,11 +144,7 @@ async function verifyCode(event: APIGatewayProxyEventV2, shareId: string) {
   return reply(200, { verified: true }, [`mna_guest=${token}; Path=/api/guest; Max-Age=3600; HttpOnly; Secure; SameSite=Lax`]);
 }
 async function authorizedShare(event: APIGatewayProxyEventV2, shareId: string) {
-  const cookie = (event.cookies ?? (event.headers["cookie"] ?? "").split(";")).map((c) => c.trim()).find((c) => c.startsWith("mna_guest="));
-  if (!cookie) throw new HttpError(401, "초대된 이메일로 인증해 주세요", "guest_auth_required");
-  let claims;
-  try { claims = await verifier.verify(cookie.slice("mna_guest=".length)); }
-  catch { throw new HttpError(401, "이메일 인증이 만료되었습니다. 다시 인증해 주세요", "guest_auth_required"); }
+  const claims = await guestSession(event);
   const email = await verifiedTokenEmail(claims);
   if (!email) throw new HttpError(401, "이메일 인증이 필요합니다", "guest_auth_required");
   const share = activeShare(await getShare(shareId));
@@ -173,7 +168,10 @@ export function publicDocument(document: LectureDocument): LectureDocument {
 export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
   try {
     if (event.headers["origin"] && event.headers["origin"] !== process.env["UPLOAD_BASE_URL"]) throw new HttpError(403, "허용되지 않은 요청입니다");
-    if (event.routeKey === "POST /api/guest/logout") return reply(200, {}, ["mna_guest=; Path=/api/guest; Max-Age=0; HttpOnly; Secure; SameSite=Lax"]);
+    if (event.routeKey === "POST /api/guest/logout") {
+      await guestSession(event);
+      return reply(200, {}, ["mna_guest=; Path=/api/guest; Max-Age=0; HttpOnly; Secure; SameSite=Lax"]);
+    }
     const shareId = event.pathParameters?.["shareId"];
     if (!z.string().uuid().safeParse(shareId).success) throw new HttpError(404, "공유 링크를 찾을 수 없습니다");
     if (event.routeKey === "POST /api/guest/lectures/{shareId}/request-code") return await requestCode(event, shareId!);

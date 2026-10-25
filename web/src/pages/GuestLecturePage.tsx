@@ -30,7 +30,13 @@ export function GuestLecturePage() {
     onSuccess: (result) => { setChallengeId(result.challengeId); setCode(""); setSent(true); verify.reset(); } });
   const verify = useMutation({ mutationFn: () => call("/verify-code", { challengeId, code }),
     onSuccess: async () => { setCode(""); await qc.resetQueries({ queryKey: ["guest-lecture"] }); } });
-  const logout = useMutation({ mutationFn: () => call("/logout", {}), onSuccess: async () => {
+  const logout = useMutation({ mutationFn: async () => {
+    try { await call("/logout", {}); }
+    catch (error) {
+      // API Gateway rejects missing/expired guest cookies before the handler runs.
+      if (!(error instanceof GuestError) || ![401, 403].includes(error.status)) throw error;
+    }
+  }, onSuccess: async () => {
     setChallengeId(""); setCode(""); setSent(false); await qc.resetQueries({ queryKey: ["guest-lecture"] });
   } });
   const busy = request.isPending || verify.isPending;
@@ -58,6 +64,7 @@ export function GuestLecturePage() {
   return <div className="mx-auto h-dvh max-w-3xl overflow-y-auto pb-8 safe-top"><Page title={document.title} subtitle={document.course || "공유된 강의 학습 자료"}>
     <div className="flex items-center justify-between gap-3 text-xs text-ink-3"><span>{expiresAt.slice(0, 10)}까지 열람</span>
       <Button size="sm" variant="ghost" loading={logout.isPending} onClick={() => logout.mutate()}>열람 종료</Button></div>
+    {logout.error && <InlineError>{logout.error.message}</InlineError>}
     {document.selectedPages && <p className="mt-3 text-sm text-accent">원본 {formatSlidePages(document.selectedPages)}페이지 · 학습 묶음 {document.pages.length}개</p>}
     <LectureExportButton document={document} />
     <Card className="mt-4 p-4"><h2 className="font-semibold mb-3">강의 정리</h2><LectureText text={document.overview} className="text-sm" /></Card>

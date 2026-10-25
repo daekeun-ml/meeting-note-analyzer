@@ -26,6 +26,17 @@ assert guest_client["GenerateSecret"] is True
 assert guest_client["ExplicitAuthFlows"] == ["ALLOW_USER_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
 assert not guest_client.get("AllowedOAuthFlows"), "Guest verification must go through the server"
 assert guest_client["ReadAttributes"] == ["email", "email_verified"]
+api_template = next(json.loads(p.read_text()) for p in root.glob("*-Api.template.json"))
+api_resources = api_template["Resources"]
+logout = next(r["Properties"] for r in api_resources.values()
+              if r["Type"] == "AWS::ApiGatewayV2::Route" and r["Properties"]["RouteKey"] == "POST /api/guest/logout")
+assert logout["AuthorizationType"] == "CUSTOM", "Guest logout must require session authentication at API Gateway"
+guest_authorizer = api_resources[logout["AuthorizerId"]["Ref"]]["Properties"]
+assert guest_authorizer["AuthorizerType"] == "REQUEST"
+assert guest_authorizer["IdentitySource"] == ["$request.header.Cookie"]
+assert guest_authorizer["AuthorizerPayloadFormatVersion"] == "2.0"
+assert guest_authorizer["EnableSimpleResponses"] is True
+assert guest_authorizer["AuthorizerResultTtlInSeconds"] == 0, "Do not cache an expired guest session's authorization"
 for resource in resources:
     if resource["Type"] == "AWS::CloudFront::Distribution":
         props = resource["Properties"]["DistributionConfig"]

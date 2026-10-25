@@ -63,6 +63,7 @@ const api = new ApiStack(app, `${prefix}-Api`, {
   lectureApiFunction: lecture.apiFunction,
   interviewApiFunction: lecture.interviewApiFunction,
   guestApiFunction: lecture.guestApiFunction,
+  guestAuthorizerFunction: lecture.guestAuthorizerFunction,
 });
 new WebStack(app, `${prefix}-Web`, {
   env,

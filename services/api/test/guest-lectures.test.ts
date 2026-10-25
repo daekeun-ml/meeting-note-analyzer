@@ -169,6 +169,30 @@ it("requires a valid verified guest token and current invitation for every read"
   expect(m.read).not.toHaveBeenCalled();
 });
 
+it("rejects logout without a valid guest session, even when invoked without the gateway", async () => {
+  const route = "POST /api/guest/logout";
+  const anonymous = await handler(event(route, {}));
+  expect(status(anonymous)).toBe(401);
+  expect(anonymous).not.toHaveProperty("cookies");
+  expect(m.verify).not.toHaveBeenCalled();
+  m.verify.mockRejectedValueOnce(new Error("expired token"));
+  const expired = await handler(event(route, {}, true));
+  expect(status(expired)).toBe(401);
+  expect(expired).not.toHaveProperty("cookies");
+});
+
+it("clears the authenticated guest cookie without requiring an active share", async () => {
+  const request = event("POST /api/guest/logout", {}, true);
+  delete request.pathParameters;
+  expect(await handler(request)).toMatchObject({
+    statusCode: 200,
+    cookies: ["mna_guest=; Path=/api/guest; Max-Age=0; HttpOnly; Secure; SameSite=Lax"],
+  });
+  expect(m.verify).toHaveBeenCalledWith("synthetic-token");
+  expect(m.share).not.toHaveBeenCalled();
+  expect(m.ddb).not.toHaveBeenCalled();
+});
+
 it("returns scoped notes and authenticated image paths without private storage paths or owner prompts", async () => {
   const response = await handler(event("GET /api/guest/lectures/{shareId}", undefined, true));
   expect(status(response)).toBe(200);

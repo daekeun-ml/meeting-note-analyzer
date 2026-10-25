@@ -8,6 +8,7 @@ vi.mock("../use-config", () => ({ useConfig: () => ({ apiBase: "/api" }) }));
 import { GuestLecturePage } from "../../pages/GuestLecturePage";
 let root: Root, element: HTMLDivElement, client: QueryClient;
 let authenticated = false, revoked = false, rejectCode = false;
+let logoutStatus = 200;
 const shareId = "11111111-1111-4111-8111-111111111111";
 const fixture = { expiresAt: "2099-01-01", images: [], document: { version: 1, lectureId: "lecture", title: "공유된 CTC 강의", course: "ML", generatedAt: "2026-01-01",
   outputLanguage: "ko", durationSec: 120, selectedPages: [38, 39], originalPageCount: 73, grouped: true,
@@ -15,12 +16,16 @@ const fixture = { expiresAt: "2099-01-01", images: [], document: { version: 1, l
 const fetchMock = vi.fn();
 beforeEach(async () => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  authenticated = revoked = rejectCode = false; fetchMock.mockReset();
+  authenticated = revoked = rejectCode = false; logoutStatus = 200; fetchMock.mockReset();
   fetchMock.mockImplementation(async (url: string, options: RequestInit) => {
     let data: unknown; let status = 200;
     if (url.endsWith("/request-code")) data = { challengeId: "22222222-2222-4222-8222-abcdefabcdef" };
     else if (url.endsWith("/verify-code")) { authenticated = !rejectCode; data = rejectCode ? { message: "잘못된 인증 코드" } : { verified: true }; status = rejectCode ? 400 : 200; }
-    else if (url.endsWith("/logout")) { authenticated = false; data = {}; }
+    else if (url.endsWith("/logout")) {
+      status = logoutStatus;
+      if ([200, 401, 403].includes(status)) authenticated = false;
+      data = status === 500 ? { message: "일시적인 서버 오류" } : {};
+    }
     else if (revoked) { status = 404; data = { message: "공유가 해제되었습니다" }; }
     else { status = authenticated ? 200 : 401; data = authenticated ? fixture : { message: "이메일 인증이 필요합니다" }; }
     expect(options.credentials).toBe("include"); expect(options.cache).toBe("no-store");
@@ -83,4 +88,29 @@ it("hides previously loaded notes when a fresh read reports revocation", async (
   await act(async () => { await client.invalidateQueries({ queryKey: ["guest-lecture"] }); await new Promise((resolve) => setTimeout(resolve, 20)); });
   expect(element.textContent).not.toContain("공유된 CTC 강의");
   expect(element.textContent).toContain("공유가 해제되었습니다");
+});
+
+it.each([200, 401, 403])("removes loaded notes after logout returns %s", async (status) => {
+  authenticated = true;
+  logoutStatus = status;
+  await act(async () => { await client.invalidateQueries({ queryKey: ["guest-lecture"] }); await new Promise((resolve) => setTimeout(resolve, 20)); });
+  expect(element.textContent).toContain("공유된 CTC 강의");
+  await act(async () => {
+    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "열람 종료")!.click();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  });
+  expect(element.textContent).not.toContain("공유된 CTC 강의");
+  expect(element.textContent).toContain("초대된 이메일");
+});
+
+it("shows a retryable logout error when the server fails", async () => {
+  authenticated = true;
+  logoutStatus = 500;
+  await act(async () => { await client.invalidateQueries({ queryKey: ["guest-lecture"] }); await new Promise((resolve) => setTimeout(resolve, 20)); });
+  await act(async () => {
+    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "열람 종료")!.click();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  });
+  expect(element.textContent).toContain("일시적인 서버 오류");
+  expect(element.textContent).toContain("공유된 CTC 강의");
 });
