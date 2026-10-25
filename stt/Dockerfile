@@ -14,7 +14,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # plain venv + pip: the image is built under qemu on an arm64 workstation, where the uv binary segfaults.
 COPY security-constraints.txt /opt/security-constraints.txt
 ENV PIP_CONSTRAINT=/opt/security-constraints.txt
-RUN python3 -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir --upgrade pip wheel
+# Install patched general dependencies from PyPI before switching to the CUDA-only index.
+RUN python3 -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir --upgrade pip wheel filelock setuptools
 
 # torch stack first (cu126 wheels), then the rest; versions pinned for reproducibility.
 RUN /opt/venv/bin/pip install --no-cache-dir torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu126

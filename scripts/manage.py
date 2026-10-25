@@ -233,7 +233,7 @@ def publish_models(config: dict) -> None:
         archive = Path(directory) / "publisher.zip"
         with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
             for path in sorted((ROOT / "scripts/stt").iterdir()):
-                if path.is_file() and path.suffix in (".py", ".sh", ".yml"):
+                if path.is_file() and path.suffix in (".py", ".sh", ".yml", ".txt"):
                     bundle.write(path, path.name)
         digest = hashlib.sha256(archive.read_bytes()).hexdigest()
         source_key = f"models/publisher/{digest}.zip"

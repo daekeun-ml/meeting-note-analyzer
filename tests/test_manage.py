@@ -5,6 +5,7 @@ import stat
 import subprocess
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import call, patch
 
 SPEC = importlib.util.spec_from_file_location("manage", Path(__file__).parents[1] / "scripts/manage.py")
@@ -66,6 +67,20 @@ class DeploymentTests(unittest.TestCase):
             self.assertFalse(manage.models_ready(self.config))
         self.assertEqual(checked[0], expected + "ready.json")
         self.assertTrue(all(key.startswith(expected) for key in checked))
+
+    def test_model_publisher_upload_includes_security_constraints(self):
+        archives = []
+        def upload(command, config):
+            with zipfile.ZipFile(command[3]) as bundle:
+                archives.append(bundle.namelist())
+                self.assertIn("accelerate>=1.15.0", bundle.read("security-constraints.txt").decode())
+            return ""
+        with patch.object(manage, "outputs", return_value={"PublisherProject": "publisher", "DataBucketName": "test-bucket"}), \
+             patch.object(manage, "run", side_effect=upload), patch.object(manage.subprocess, "run"), \
+             patch.object(manage, "models_ready", return_value=True):
+            manage.publish_models(self.config)
+        self.assertEqual(len(archives), 1)
+        self.assertIn("buildspec.yml", archives[0])
 
     def test_first_deploy_reapplies_the_assigned_cloudfront_url(self):
         calls = []

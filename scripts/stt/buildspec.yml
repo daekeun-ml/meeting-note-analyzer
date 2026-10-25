@@ -5,7 +5,7 @@ phases:
     runtime-versions:
       python: 3.12
     commands:
-      - pip install --quiet --upgrade pip -c security-constraints.txt
+      - pip install --quiet --upgrade pip filelock setuptools -c security-constraints.txt
       - pip install --quiet "torch==2.8.0" --index-url https://download.pytorch.org/whl/cpu -c security-constraints.txt
       - pip install --quiet -c security-constraints.txt "crisperwhisper[ct2,convert]==2.0.2" "huggingface_hub>=0.34,<1" "transformers>=4.40,<5" "accelerate>=1.15.0" "boto3>=1.35"
   build:
